@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "FicrA2hBdFE=",
+  "success": true,
+  "projectFilePath": "D:\\atahualpa-dev\\scratch\\ZwiftClickV2-Bridge\\src\\ZwiftClickV2-Bridge.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\milab\\.nuget\\packages\\google.protobuf\\3.35.0\\google.protobuf.3.35.0.nupkg.sha512",
+    "C:\\Users\\milab\\.nuget\\packages\\portable.bouncycastle\\1.9.0\\portable.bouncycastle.1.9.0.nupkg.sha512",
+    "C:\\Users\\milab\\.nuget\\packages\\microsoft.windows.sdk.net.ref\\10.0.19041.56\\microsoft.windows.sdk.net.ref.10.0.19041.56.nupkg.sha512"
+  ],
+  "logs": []
+}
