@@ -1,11 +1,12 @@
 using System.Security.Cryptography;
 using Xunit;
 using ZwiftClickV2.Bridge.Crypto;
+using ZwiftClickV2.Bridge.Protocol;
 
 namespace ZwiftClickV2.Bridge.Tests;
 
 /// <summary>
-/// Tests para ZPEncryption V2 (Click 2025: GCM + salt 96B).
+/// Tests para ZPEncryption V2 y helpers de protocolo Click 2025.
 /// </summary>
 public class ZPEncryptionTests
 {
@@ -35,10 +36,10 @@ public class ZPEncryptionTests
         byte[] devicePub = ExportPub(deviceKey);
 
         var bridgeZp = new ZPEncryptionV2();
-        bridgeZp.Initialize(bridgeKey, devicePub, saltPublicKey65: devicePub);
+        bridgeZp.Initialize(bridgeKey, devicePub, devicePub, bridgePub);
 
         var deviceZp = new ZPEncryptionV2();
-        deviceZp.Initialize(deviceKey, bridgePub, saltPublicKey65: devicePub);
+        deviceZp.Initialize(deviceKey, bridgePub, devicePub, bridgePub);
 
         byte[] msg = "Hola"u8.ToArray();
         byte[] ct = bridgeZp.Encrypt(msg);
@@ -53,10 +54,10 @@ public class ZPEncryptionTests
         using var b = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
         byte[] bPub = ExportPub(b), aPub = ExportPub(a);
 
-        var az = new ZPEncryptionV2(); az.Initialize(a, bPub, saltPublicKey65: bPub);
+        var az = new ZPEncryptionV2(); az.Initialize(a, bPub, bPub, aPub);
         byte[] ct = az.Encrypt("test"u8.ToArray());
         ct[0] ^= 0xFF;
-        var bz = new ZPEncryptionV2(); bz.Initialize(b, aPub, saltPublicKey65: bPub);
+        var bz = new ZPEncryptionV2(); bz.Initialize(b, aPub, bPub, aPub);
         Assert.ThrowsAny<CryptographicException>(() => bz.Decrypt(ct));
     }
 
@@ -91,6 +92,39 @@ public class ZPEncryptionTests
     }
 
     [Fact]
+    public void V2_UsesExpectedHkdfParameters()
+    {
+        using var a = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        using var b = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+
+        var zp = new ZPEncryptionV2();
+        zp.Initialize(a, ExportPub(b));
+
+        Assert.Equal("handshake data", System.Text.Encoding.ASCII.GetString(zp.GetHkdfInfo()));
+        Assert.Equal(128, zp.HkdfSalt.Length);
+        Assert.Equal(32, zp.AesKey.Length);
+        Assert.Equal(4, zp.IvBase.Length);
+    }
+
+    [Fact]
+    public void ZapCrypto_NullAad_RoundTrip_Works()
+    {
+        byte[] devicePub = Enumerable.Range(1, 64).Select(i => (byte)i).ToArray();
+        byte[] localPub = Enumerable.Range(65, 64).Select(i => (byte)i).ToArray();
+        byte[] sharedSecret = Enumerable.Range(129, 32).Select(i => (byte)i).ToArray();
+
+        var crypto = new ZapCrypto();
+        crypto.DeriveSessionKey(devicePub, localPub, sharedSecret);
+
+        byte[] ciphertext = crypto.Encrypt("RideOn"u8.ToArray(), counter: 1, associatedData: null);
+        byte[] plaintext = crypto.Decrypt(ciphertext, counter: 1, associatedData: null);
+
+        Assert.Equal("RideOn"u8.ToArray(), plaintext);
+        Assert.Equal(128, crypto.HkdfSalt.Length);
+        Assert.Equal(8, crypto.BuildNonce(1).Length);
+    }
+
+    [Fact]
     public void V1_RoundTrip_Works()
     {
         using var a = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
@@ -117,6 +151,8 @@ public class ZPEncryptionTests
             ZPEncryptionFactory.DetectVersion(new byte[] { 0x02, 0x03 }));
         Assert.Equal(ZPEncryptionFactory.ProtocolVersion.V2,
             ZPEncryptionFactory.DetectVersion(new byte[] { 0x01, 0x02 }));
+        Assert.Equal(ZPEncryptionFactory.ProtocolVersion.V2,
+            ZPEncryptionFactory.DetectVersion(new byte[] { 0x01, 0x03 }));
     }
 
     [Fact]
@@ -125,6 +161,38 @@ public class ZPEncryptionTests
         byte[] resp = new byte[] { (byte)'R', (byte)'i', (byte)'d', (byte)'e', (byte)'O', (byte)'n', 0x02, 0x03, 0x10, 0x64 };
         Assert.Equal(ZPEncryptionFactory.ProtocolVersion.V2,
             ZPEncryptionFactory.DetectVersionFromResponse(resp));
+    }
+
+    [Fact]
+    public void HandshakeParser_ExtractsRawPublicKey_From_0103_Response()
+    {
+        byte[] raw = Enumerable.Range(1, 64).Select(i => (byte)i).ToArray();
+        byte[] response = new byte[72];
+        Array.Copy("RideOn"u8.ToArray(), response, 6);
+        response[6] = 0x01;
+        response[7] = 0x03;
+        Array.Copy(raw, 0, response, 8, 64);
+
+        Assert.Equal(HandshakeParser.ResponseType.PublicKey, HandshakeParser.Classify(response));
+        Assert.Equal(raw, HandshakeParser.ExtractRawPublicKey(response));
+
+        byte[] prefixed = HandshakeParser.ExtractPublicKey(response)!;
+        Assert.Equal(65, prefixed.Length);
+        Assert.Equal(0x04, prefixed[0]);
+        Assert.Equal(raw, prefixed.Skip(1).ToArray());
+    }
+
+    [Fact]
+    public void HandshakeParser_Detects_Rejection_Response()
+    {
+        byte[] rejection = new byte[]
+        {
+            (byte)'R', (byte)'i', (byte)'d', (byte)'e', (byte)'O', (byte)'n',
+            0x02, 0x03, 0x58, 0x02, 0x00, 0x00
+        };
+
+        Assert.True(HandshakeParser.LooksLikeRejection(rejection));
+        Assert.Equal(HandshakeParser.ResponseType.StatusMessage, HandshakeParser.Classify(rejection));
     }
 
     private static byte[] ExportPub(ECDiffieHellman ecdh)

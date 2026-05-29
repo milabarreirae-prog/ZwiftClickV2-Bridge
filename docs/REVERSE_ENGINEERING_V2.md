@@ -36,7 +36,7 @@ Crear un puente software (bridge) que permita usar el dispositivo **Zwift Click 
 
 | Componente | Estado | Detalle |
 |---|---|---|
-| Conexión BLE | ✅ Funciona | Sin bonding (el dispositivo no lo soporta) |
+| Conexión BLE | ✅ Funciona | Sin bonding BLE tradicional en la ruta ZAP observada |
 | Notificaciones | ✅ Funciona | CH02, CH04, CH100, CH101, CH102 |
 | Escritura BLE | ✅ Funciona | CH03 acepta writes sin error |
 | Handshake V1/V2 | ❌ Rechazado | Las 6 variantes probadas son rechazadas |
@@ -46,15 +46,15 @@ Crear un puente software (bridge) que permita usar el dispositivo **Zwift Click 
 
 ### Principales Descubrimientos
 
-1. **El esquema criptográfico es AES-128-GCM** (no CCM como se especuló inicialmente). Confirmado por ausencia de `EVP_aes_128_ccm` en el binario de ZwiftApp.exe.
-2. **El salt HKDF para V2 es de 96 bytes**: `peer_pubkey[1:65]` (64 bytes de coordenadas X+Y sin prefijo 0x04) concatenado con `SHA256(peer_pubkey[1:65])` (32 bytes). Esto difiere del salt de 32 bytes de ceros usado en V1.
-3. **El dispositivo implementa un mecanismo de rechazo**: en lugar de devolver su clave pública EC, responde con datos de estado Protobuf (batería, códigos de error). Esto sugiere un DRM a nivel de firmware.
-4. **Existen 6 formatos de handshake** identificados mediante fuzzing sistemático, todos rechazados.
-5. **El "daily unlock" es probablemente un requisito del firmware**, no del cliente Zwift.
+1. **El esquema criptográfico V2 observado en implementaciones y código actualizado es AES-256-CCM** con tag de 4 bytes.
+2. **El HKDF V2 usa `info = "handshake data"` y salt de 128 bytes**: `device_pubkey[64] || local_pubkey[64]`, ambos sin prefijo `0x04`.
+3. **La respuesta de handshake V2 válida observada es `RideOn 01 03 + pubkey[64]`**, no `00 09` ni `02 03`.
+4. **El dispositivo implementa un mecanismo de rechazo**: cuando no acepta la sesión, responde con datos Protobuf (`58 02`, batería, status).
+5. **El binario muestra un `auth challenge` resuelto por `INetworkService`**, así que el flujo no es puramente local: requiere servicio de red y bearer `access_token` válido.
 
 ### Conclusión
 
-El Zwift Click V2 implementa una capa de DRM más estricta que el V1 (Zwift Play 2023). Sin capturar el tráfico BLE de Zwift oficial (requiere sniffer hardware como Ubertooth One o nRF52840) o sin documentación adicional del fabricante, el proyecto está en un **punto muerto técnico**.
+El Zwift Click V2 implementa una capa de autenticación más estricta que el V1 (Zwift Play 2023). El punto bloqueante ya no es solo el wire format: también existe un `auth challenge` dependiente de red que ZwiftApp resuelve con `INetworkService`. Sin capturar el request HTTP real o el write BLE exacto que reinyecta la `auth response`, el proyecto sigue parcialmente bloqueado.
 
 ---
 
@@ -770,20 +770,21 @@ public class KeyboardEmulator
 
 ---
 
-## 9. DRM y Daily Unlock (INVESTIGADO)
+## 9. Device Auth y Daily Unlock (ACTUALIZADO)
 
 ### 9.1 Hallazgos en el Código de ZwiftApp.exe
 
 | Aspecto investigado | Resultado |
 |---|---|
-| Token diario descargado del servidor | **NO existe** — no se encontraron HTTP requests relacionados |
+| Bonding BLE tradicional | **NO observado** — no aparecen APIs SMP/pairing BLE en la ruta ZAP |
 | String "unlock" en el binario | Se refiere a desbloqueo de items cosméticos (bikes, jerseys, badges) |
-| Llamadas HTTP para autenticación BLE | **NO existen** — el dispositivo no se autentica vía servidor |
-| Código de licencia/DRM en el cliente | **NO se encontró** — el cliente no implementa DRM para periféricos |
+| Auth challenge del dispositivo | **SÍ existe** — `Received auth challenge` aparece en `x.c` |
+| Dependencia de red | **SÍ existe** — falla con `Network service not initialized` |
+| Bearer auth en la capa HTTP | **SÍ existe** — la red común inyecta `Authorization: Bearer <access_token>` |
 
 ### 9.2 Comportamiento Reportado por la Comunidad
 
-Múltiples fuentes independientes reportan el mismo patrón:
+Múltiples fuentes independientes reportan el mismo patrón empírico:
 
 1. Usuario conecta el Click V2 a Zwift oficial por ~30 segundos (el "unlock diario")
 2. Durante esos 30 segundos, Zwift oficial envía comandos al dispositivo
@@ -791,53 +792,42 @@ Múltiples fuentes independientes reportan el mismo patrón:
 4. Durante esas 24 horas, apps de terceros (como QDomyos-Zwift) pueden conectarse
 5. Pasadas 24 horas, el dispositivo vuelve a rechazar conexiones no oficiales
 
-### 9.3 Hipótesis Principal
+### 9.3 Hipótesis Principal Actual
 
-El "daily unlock" es un **requisito del firmware del dispositivo**, no del cliente Zwift:
+El binario ya no soporta la hipótesis de "unlock 100% local". La evidencia más fuerte apunta a este flujo:
 
 ```
-┌──────────────────────────────────────────────┐
-│           Firmware del Click V2               │
-│                                                │
-│  ┌──────────────┐    ┌────────────────────┐   │
-│  │ Temporizador  │    │ Flag "unlocked"     │   │
-│  │ 24 horas      │───▶│ (booleano)          │   │
-│  └──────────────┘    └────────┬───────────┘   │
-│                               │                │
-│                     ┌─────────▼───────────┐   │
-│                     │ ¿Flag unlocked?      │   │
-│                     └─────────┬───────────┘   │
-│                           ✓   │   ✗            │
-│                     ┌─────────▼───────────┐   │
-│                     │ Aceptar handshake    │   │
-│                     │ (devolver pubkey)    │   │
-│                     └─────────────────────┘   │
-│                     ┌─────────────────────┐   │
-│                     │ Rechazar handshake   │   │
-│                     │ (devolver status)    │   │
-│                     └─────────────────────┘   │
-└──────────────────────────────────────────────┘
+1. El dispositivo envía un `auth challenge` a ZwiftApp.
+2. ZwiftApp intenta resolverlo mediante `INetworkService`.
+3. La capa HTTP común usa `Authorization: Bearer <access_token>`.
+4. Si la respuesta llega, ZwiftApp la reinyecta a la capa ZAP (`Received auth response`).
+5. Si no hay red/sesión válida, el challenge falla y el dispositivo sigue rechazando el canal seguro.
 ```
 
 **Evidencia que apoya esta hipótesis:**
-- El dispositivo siempre responde a nuestros handshakes (no ignora), pero con datos de estado en lugar de clave pública
-- Esto indica que el firmware está consciente y rechaza activamente, no es un error de formato
-- QDomyos-Zwift confirma el comportamiento de "desbloqueo de 30 segundos" con Zwift oficial
-- El temporizador de ~24 horas es consistente con un contador interno del firmware
+- `Received auth challenge (size = %zu)` en el decompilado.
+- `Device challenge failed: Network service not initialized` en la misma ruta.
+- `Received auth response (size = %zu)` inmediatamente después en el flujo simétrico.
+- El stack HTTP de Zwift inyecta `Authorization: Bearer <access_token>` y marca el token invalidado en `401`.
+- La `auth response` se entrega a `ZapMessageComponent`; el `0x13` observado en esta ruta es el id del componente, no el opcode del mensaje.
+- `ZP device authentication is not enabled` aparece en otra rama previa del subsistema ZP; actúa como feature gate, no como sustituto del handler de challenge.
 
-### 9.4 Comando de Reset del Temporizador (NO IDENTIFICADO)
+### 9.4 Estado de `FF 04 00`
 
-Si la hipótesis es correcta, Zwift oficial debe enviar un comando especial que resetea el temporizador interno. Este comando:
-- **No** está documentado en los FileDescriptorProto extraídos (no es un mensaje ZOP estándar)
-- **No** se identificó en el análisis estático de ZwiftApp.exe
-- Podría ser un write a una característica BLE específica (CH06, CH100, CH101, CH102)
-- Podría ser una secuencia de bytes mágica en CH03 antes del handshake
+`FF 04 00` sigue siendo un artefacto empírico importante, pero su rol exacto no está cerrado:
+- Proyectos externos lo envían en texto plano post-handshake.
+- El decompilado revisado en esta fase no lo confirma como "unlock definitivo".
+- La autenticación por challenge/red reduce la confianza en cualquier conclusión de "unlock solo local".
+- Puede seguir siendo un comando de control secundario o una pieza posterior al challenge.
+- Tampoco hay prueba binaria de que la `auth response` o `FF 04 00` viajen específicamente por CH06.
 
 ### 9.5 Implicaciones
 
-- Sin el comando de reset del temporizador, el dispositivo eventualmente rechazará todos los handshakes
-- El desbloqueo manual con Zwift oficial es un workaround temporal pero no una solución definitiva
-- La única forma confiable de identificar el comando es capturar tráfico BLE de Zwift oficial con un sniffer hardware
+- Un `access_token` válido de sesión parece formar parte del flujo de device auth.
+- No hay evidencia firme de un `refresh_token` usado directamente por el challenge.
+- Tampoco hay evidencia firme todavía de scopes ZAP dedicados.
+- Tampoco apareció un endpoint HTTP literal del challenge en el decompilado inspeccionado.
+- La forma confiable de cerrar el flujo sigue siendo capturar tráfico real HTTP/BLE durante hot pairing.
 
 ### 9.6 Comparación con V1 (Zwift Play 2023)
 

@@ -5,7 +5,7 @@ namespace ZwiftClickV2.Bridge.Crypto;
 /// de la respuesta del handshake y crea la implementación de cifrado adecuada.
 /// 
 /// V1 (Play 2023): sufijos 01 01, 00 09 → AES-128-CCM
-/// V2 (Click 2025): sufijos 02 03, 01 02 → AES-128-GCM, salt 96B
+/// V2 (Click 2025): sufijos 01 02, 01 03, 02 03 → AES-256-CCM, salt 128B
 /// </summary>
 public static class ZPEncryptionFactory
 {
@@ -31,8 +31,9 @@ public static class ZPEncryptionFactory
             (0x00, 0x09) => ProtocolVersion.V1,
 
             // V2: Zwift Click 2025
-            (0x02, 0x03) => ProtocolVersion.V2,
             (0x01, 0x02) => ProtocolVersion.V2,
+            (0x01, 0x03) => ProtocolVersion.V2,
+            (0x02, 0x03) => ProtocolVersion.V2,
 
             _ => ProtocolVersion.Unknown
         };
@@ -113,7 +114,17 @@ internal class ZPEncryptionAdapterV1 : IZPEncryption
 /// </summary>
 internal class ZPEncryptionAdapterV2 : IZPEncryption
 {
-    private readonly ZPEncryptionV2 _v2 = new();
+    private readonly ZPEncryptionV2 _v2;
+
+    public ZPEncryptionAdapterV2()
+        : this(new ZPEncryptionV2())
+    {
+    }
+
+    public ZPEncryptionAdapterV2(ZPEncryptionV2 v2)
+    {
+        _v2 = v2;
+    }
 
     public bool IsInitialized => _v2.IsInitialized;
 

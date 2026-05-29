@@ -1,0 +1,16 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Runtime logs
+logs/
+*.log
+
+# Rider / VS / VS Code
+.vs/
+.idea/
+*.user
+
+# OS
+Thumbs.db
+.DS_Store

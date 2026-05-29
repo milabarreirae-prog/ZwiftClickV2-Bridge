@@ -15,9 +15,9 @@ namespace ZwiftClickV2.Bridge.Bridge;
 /// 3. Handshake ECDH (Hello → Welcome)
 /// 4. Detectar versión del protocolo (V1/V2)
 /// 5. Inicializar cifrado
-/// 6. Enviar writes ZOP post-handshake (Capability, Ping)
-/// 7. Iniciar keep-alive
-/// 8. Escuchar eventos de botones en CH02
+/// 6. Enviar write ZOP post-handshake (Capability)
+/// 7. Escuchar eventos de botones en CH02
+/// Nota: keep-alive ausente en implementaciones de referencia (jat255/app.py, x.c)
 /// </summary>
 public class ClickV2Bridge : IDisposable
 {
@@ -29,7 +29,6 @@ public class ClickV2Bridge : IDisposable
 
     private ZopSequencer? _sequencer;
     private IZPEncryption? _crypto;
-    private CancellationTokenSource? _keepAliveCts;
     private ECDiffieHellman? _ourEcdhKey;
 
     public bool IsOperational => _ble.IsConnected && _crypto?.IsInitialized == true;
@@ -66,13 +65,10 @@ public class ClickV2Bridge : IDisposable
         if (!handshakeResult.success) return false;
 
         // 5. Post-handshake: enviar writes ZOP
-        await SendPostHandshakeMessagesAsync(syncTx);
+        await SendPostHandshakeMessagesAsync();
 
         // 6. Suscribirse a eventos de botones
         await SubscribeToButtonEventsAsync(eventCh);
-
-        // 7. Iniciar keep-alive
-        StartKeepAlive(syncTx);
 
         Console.WriteLine("✅ Bridge operativo — escuchando eventos de botones...");
         return true;
@@ -156,29 +152,16 @@ public class ClickV2Bridge : IDisposable
         return (true, response);
     }
 
-    private async Task SendPostHandshakeMessagesAsync(GattCharacteristic syncTx)
+    private async Task SendPostHandshakeMessagesAsync()
     {
         Console.WriteLine("📤 Enviando writes ZOP post-handshake...");
 
-        // Write 1: Capability (payload vacío)
+        // Write 1: Capability (payload vacío, seq=0)
+        // Nota: solo este write está justificado por las implementaciones de referencia.
+        // Keep-alive y pings posteriores están confirmados como AUSENTES en jat255/app.py y x.c.
         byte[] capFrame = _sequencer!.PackageAndEncrypt(ZopCapability.CreateDefault().Payload);
         await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, capFrame);
         Console.WriteLine($"   ✅ Write 1 (Capability) seq=0: {capFrame.Length}B");
-
-        // Write 2: Ping
-        byte[] pingFrame = _sequencer.PackageAndEncrypt(ZopPing.Payload);
-        await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, pingFrame);
-        Console.WriteLine($"   ✅ Write 2 (Ping) seq=1: {pingFrame.Length}B");
-
-        // Write 3: Empty/KeepAlive
-        byte[] e3 = _sequencer.PackageAndEncrypt(Array.Empty<byte>());
-        await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, e3);
-        Console.WriteLine($"   ✅ Write 3 (Empty) seq=2: {e3.Length}B");
-
-        // Write 4: Another ping
-        byte[] e4 = _sequencer.PackageAndEncrypt(ZopPing.Payload);
-        await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, e4);
-        Console.WriteLine($"   ✅ Write 4 (Ping) seq=3: {e4.Length}B");
     }
 
     private async Task SubscribeToButtonEventsAsync(GattCharacteristic? eventCh)
@@ -214,31 +197,8 @@ public class ClickV2Bridge : IDisposable
         });
     }
 
-    private void StartKeepAlive(GattCharacteristic syncTx)
-    {
-        _keepAliveCts = new CancellationTokenSource();
-        _ = Task.Run(async () =>
-        {
-            while (!_keepAliveCts.Token.IsCancellationRequested)
-            {
-                try
-                {
-                    await Task.Delay(5000, _keepAliveCts.Token);
-                    if (_sequencer != null && _writer.IsRegistered(BleDeviceManager.CH03_UUID))
-                    {
-                        byte[] ping = _sequencer.PackageAndEncrypt(ZopPing.Payload);
-                        await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, ping);
-                    }
-                }
-                catch (TaskCanceledException) { break; }
-                catch (Exception ex) { Console.WriteLine($"   ⚠️  Keep-alive error: {ex.Message}"); }
-            }
-        });
-    }
-
     public void Stop()
     {
-        _keepAliveCts?.Cancel();
         _ble.Disconnect();
     }
 

@@ -1,8 +1,9 @@
 namespace ZwiftClickV2.Bridge.Protocol.Messages;
 
 /// <summary>
-/// Mensaje Ping — keep-alive periódico para mantener la conexión.
-/// Se envía cada ~5 segundos post-handshake.
+/// Mensaje Ping — función no confirmada en implementaciones de referencia.
+/// Nota: el keep-alive periódico está confirmado como AUSENTE en jat255/app.py y x.c.
+/// Esta clase se conserva como referencia pero no debe usarse en bucles de keep-alive.
 /// </summary>
 public class ZopPing
 {

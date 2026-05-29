@@ -2,8 +2,10 @@ namespace ZwiftClickV2.Bridge.Protocol.Messages;
 
 /// <summary>
 /// Mensaje PeripheralEvent — evento de botón recibido del Click V2.
-/// Se recibe en CH02 (Notify) post-handshake, cifrado con AES-128-GCM.
-/// 
+/// Se recibe en CH02 (Notify) post-handshake.
+/// Wire opcode: ZapWireOpcode.PeripheralEvent (0x37), inferido de jat255/constants.py.
+/// Esquema de cifrado post-handshake: no confirmado (investigación abierta).
+///
 /// Posibles tipos de evento:
 /// - LeftClick  → botón izquierdo presionado
 /// - RightClick → botón derecho presionado

@@ -25,10 +25,13 @@ public class ZopHello
     public byte[] BuildHandshakePayload()
     {
         byte[] rideOn = "RideOn"u8.ToArray();
-        byte[] result = new byte[rideOn.Length + Suffix.Length + PublicKey.Length];
+        byte[] publicKeyWire = PublicKey.Length == 65 && PublicKey[0] == 0x04
+            ? PublicKey.AsSpan(1, 64).ToArray()
+            : PublicKey.ToArray();
+        byte[] result = new byte[rideOn.Length + Suffix.Length + publicKeyWire.Length];
         Array.Copy(rideOn, 0, result, 0, rideOn.Length);
         Array.Copy(Suffix, 0, result, rideOn.Length, Suffix.Length);
-        Array.Copy(PublicKey, 0, result, rideOn.Length + Suffix.Length, PublicKey.Length);
+        Array.Copy(publicKeyWire, 0, result, rideOn.Length + Suffix.Length, publicKeyWire.Length);
         return result;
     }
 }
