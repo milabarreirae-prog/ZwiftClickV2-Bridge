@@ -2,6 +2,13 @@
 [Bb]in/
 [Oo]bj/
 
+# Aplicación empaquetada para distribución
+dist/
+
+# Salidas temporales de compilación/tests
+build_*.txt
+test_out.txt
+
 # Runtime logs
 logs/
 *.log

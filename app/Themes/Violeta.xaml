@@ -1,0 +1,272 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ════════════════════════════════════════════════════════════════════
+         PALETA VIOLETA / LILA
+         Inspirada en la estructura de paleta de MyWoosh (fondo oscuro + un
+         primario vivo + un acento cálido), pero llevada por completo a tonos
+         violetas y lilas. Sin naranjas ni colores corporativos de terceros.
+         ════════════════════════════════════════════════════════════════════ -->
+
+    <Color x:Key="BgDeepColor">#160E22</Color>      <!-- fondo más profundo (berenjena casi negra) -->
+    <Color x:Key="BgColor">#1E1430</Color>          <!-- fondo principal -->
+    <Color x:Key="SurfaceColor">#2A1C42</Color>     <!-- tarjetas -->
+    <Color x:Key="SurfaceAltColor">#34245200</Color>
+    <Color x:Key="SurfaceHiColor">#3A2860</Color>   <!-- tarjeta resaltada / hover -->
+    <Color x:Key="StrokeColor">#4A3470</Color>      <!-- bordes sutiles -->
+
+    <Color x:Key="PrimaryColor">#8B5CF6</Color>     <!-- violeta vivo -->
+    <Color x:Key="PrimaryHiColor">#A78BFA</Color>   <!-- violeta claro (hover) -->
+    <Color x:Key="LilacColor">#C4A5FF</Color>       <!-- lila -->
+    <Color x:Key="LilacSoftColor">#E6D8FF</Color>   <!-- lila muy suave -->
+    <Color x:Key="BloomColor">#F472B6</Color>       <!-- acento flor (rosa-magenta) -->
+    <Color x:Key="PetalColor">#F9A8D4</Color>       <!-- pétalo rosa claro -->
+    <Color x:Key="PollenColor">#FCD34D</Color>      <!-- centro de la flor -->
+
+    <Color x:Key="TextColor">#F6F1FF</Color>
+    <Color x:Key="TextMutedColor">#B7A6D6</Color>
+    <Color x:Key="SuccessColor">#34D399</Color>
+    <Color x:Key="DangerColor">#FB7185</Color>
+
+    <!-- Acento bandera trans (azul / rosa / blanco) — guiño tasteful a la autora. -->
+    <Color x:Key="TransBlueColor">#5BCEFA</Color>
+    <Color x:Key="TransPinkColor">#F5A9B8</Color>
+    <Color x:Key="TransWhiteColor">#FFFFFF</Color>
+
+    <!-- ── Pinceles ─────────────────────────────────────────────────────── -->
+    <SolidColorBrush x:Key="BgDeepBrush"   Color="{StaticResource BgDeepColor}" />
+    <SolidColorBrush x:Key="BgBrush"       Color="{StaticResource BgColor}" />
+    <SolidColorBrush x:Key="SurfaceBrush"  Color="{StaticResource SurfaceColor}" />
+    <SolidColorBrush x:Key="SurfaceHiBrush" Color="{StaticResource SurfaceHiColor}" />
+    <SolidColorBrush x:Key="StrokeBrush"   Color="{StaticResource StrokeColor}" />
+    <SolidColorBrush x:Key="PrimaryBrush"  Color="{StaticResource PrimaryColor}" />
+    <SolidColorBrush x:Key="LilacBrush"    Color="{StaticResource LilacColor}" />
+    <SolidColorBrush x:Key="LilacSoftBrush" Color="{StaticResource LilacSoftColor}" />
+    <SolidColorBrush x:Key="BloomBrush"    Color="{StaticResource BloomColor}" />
+    <SolidColorBrush x:Key="TextBrush"     Color="{StaticResource TextColor}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+    <SolidColorBrush x:Key="SuccessBrush"  Color="{StaticResource SuccessColor}" />
+    <SolidColorBrush x:Key="DangerBrush"   Color="{StaticResource DangerColor}" />
+
+    <!-- Degradado principal violeta → lila, usado en botones y cabeceras. -->
+    <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource PrimaryColor}" Offset="0" />
+        <GradientStop Color="{StaticResource BloomColor}" Offset="1.2" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="{StaticResource PrimaryColor}" Offset="0" />
+        <GradientStop Color="{StaticResource LilacColor}" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- Cinta bandera trans para detalles finos. -->
+    <LinearGradientBrush x:Key="TransRibbonGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="{StaticResource TransBlueColor}" Offset="0.0" />
+        <GradientStop Color="{StaticResource TransBlueColor}" Offset="0.2" />
+        <GradientStop Color="{StaticResource TransPinkColor}" Offset="0.2" />
+        <GradientStop Color="{StaticResource TransPinkColor}" Offset="0.4" />
+        <GradientStop Color="{StaticResource TransWhiteColor}" Offset="0.4" />
+        <GradientStop Color="{StaticResource TransWhiteColor}" Offset="0.6" />
+        <GradientStop Color="{StaticResource TransPinkColor}" Offset="0.6" />
+        <GradientStop Color="{StaticResource TransPinkColor}" Offset="0.8" />
+        <GradientStop Color="{StaticResource TransBlueColor}" Offset="0.8" />
+        <GradientStop Color="{StaticResource TransBlueColor}" Offset="1.0" />
+    </LinearGradientBrush>
+
+    <!-- ── Tipografía ───────────────────────────────────────────────────── -->
+    <Style x:Key="Display" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontSize" Value="34" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="H1" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="H2" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="Body" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="LineHeight" Value="22" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style x:Key="Muted" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="LineHeight" Value="20" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- ── Tarjeta ──────────────────────────────────────────────────────── -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource StrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="20" />
+    </Style>
+
+    <!-- ── Botón primario (degradado violeta → flor) ────────────────────── -->
+    <Style x:Key="PrimaryButton" TargetType="Button">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="22,12" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" CornerRadius="12" Background="{StaticResource PrimaryGradient}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.92" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.8" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.4" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── Botón fantasma (contorno) ────────────────────────────────────── -->
+    <Style x:Key="GhostButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource LilacSoftBrush}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="22,12" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" CornerRadius="12" Background="Transparent"
+                            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="1.5"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource SurfaceHiBrush}" />
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="bd" Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── Botón de navegación lateral (toggle visual por Tag="active") ──── -->
+    <Style x:Key="NavButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="FontSize" Value="14.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="16,11" />
+        <Setter Property="Margin" Value="0,3" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" CornerRadius="11" Background="Transparent"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource SurfaceHiBrush}" />
+                            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                        </Trigger>
+                        <Trigger Property="Tag" Value="active">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource SurfaceHiBrush}" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── Insignia "Gratis para siempre" ───────────────────────────────── -->
+    <Style x:Key="FreeBadge" TargetType="Border">
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Background" Value="#2334D399" />
+        <Setter Property="BorderBrush" Value="{StaticResource SuccessBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <!-- ── Campos de texto / contraseña ─────────────────────────────────── -->
+    <Style TargetType="TextBox">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="CaretBrush" Value="{StaticResource LilacBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="bd" CornerRadius="10" Background="{StaticResource BgDeepBrush}"
+                            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="PasswordBox">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="CaretBrush" Value="{StaticResource LilacBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="bd" CornerRadius="10" Background="{StaticResource BgDeepBrush}"
+                            BorderBrush="{StaticResource StrokeBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Etiqueta de campo -->
+    <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+        <Setter Property="Margin" Value="2,0,0,6" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+</ResourceDictionary>

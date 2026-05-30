@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Violeta</RootNamespace>
+    <AssemblyName>Violeta</AssemblyName>
+    <ApplicationIcon>Assets\violeta.ico</ApplicationIcon>
+
+    <!-- Identidad del producto (interfaz amigable, sin marcas propietarias). -->
+    <Product>Violeta</Product>
+    <AssemblyTitle>Violeta — puente para tu mando de ciclismo indoor</AssemblyTitle>
+    <Description>Conecta tu mando de ciclismo indoor con cualquier app, mediante teclas. Software libre, gratis y para siempre.</Description>
+    <Company>Hecho con cariño por una mujer trans</Company>
+    <Authors>Una mujer trans 🏳️‍⚧️</Authors>
+    <Copyright>Software libre (MIT). Gratis y para siempre.</Copyright>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reutiliza TODA la lógica probada del bridge (BLE, cripto, unlock, teclado). -->
+    <ProjectReference Include="..\src\ZwiftClickV2-Bridge.csproj" />
+  </ItemGroup>
+
+</Project>

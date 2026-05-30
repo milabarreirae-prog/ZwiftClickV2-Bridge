@@ -1,0 +1,90 @@
+<UserControl x:Class="Violeta.Views.WelcomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:Violeta.Controls">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="44,40,44,40" MaxWidth="820" HorizontalAlignment="Left">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Héroe -->
+            <Border Grid.Row="0" Style="{StaticResource Card}" Padding="32">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <Border Style="{StaticResource FreeBadge}" Margin="0,0,0,16">
+                            <TextBlock Foreground="{StaticResource SuccessBrush}" FontSize="12.5" FontWeight="SemiBold"
+                                       Text="● Gratis, libre y para siempre" />
+                        </Border>
+                        <TextBlock Style="{StaticResource Display}" Text="Tu mando, en cualquier app de ciclismo indoor." />
+                        <TextBlock Style="{StaticResource Body}" Margin="0,14,0,0" Foreground="{StaticResource LilacSoftBrush}"
+                                   Text="Violeta es un puente: conecta el mando de tu rodillo con tu PC y convierte cada botón en una tecla. Así puedes cambiar de pantalla o de marcha en la app de entrenamiento que tú elijas, sin ataduras." />
+                        <StackPanel Orientation="Horizontal" Margin="0,26,0,0">
+                            <Button x:Name="btnGo" Style="{StaticResource PrimaryButton}" Content="🚴  Conectar mi mando" Click="Go_Click" />
+                            <Button x:Name="btnHow" Style="{StaticResource GhostButton}" Margin="12,0,0,0" Content="📖  Ver cómo funciona" Click="How_Click" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <c:LogoControl Grid.Column="1" Width="200" Height="160" Margin="24,0,0,0" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <!-- Tres promesas -->
+            <Grid Grid.Row="1" Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="🆓" FontSize="26" />
+                        <TextBlock Style="{StaticResource H2}" Margin="0,8,0,4" Text="Siempre gratis" />
+                        <TextBlock Style="{StaticResource Muted}" Text="Sin precio, sin suscripción, sin anuncios. Es software libre y lo seguirá siendo." />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="🔒" FontSize="26" />
+                        <TextBlock Style="{StaticResource H2}" Margin="0,8,0,4" Text="Respeta tu privacidad" />
+                        <TextBlock Style="{StaticResource Muted}" Text="Tus credenciales solo viven en memoria para iniciar sesión con tu cuenta. Nunca se guardan ni se comparten." />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="4" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="🧩" FontSize="26" />
+                        <TextBlock Style="{StaticResource H2}" Margin="0,8,0,4" Text="Funciona con todo" />
+                        <TextBlock Style="{StaticResource Muted}" Text="Como emula teclas estándar, sirve con cualquier app de ciclismo indoor que entienda el teclado." />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Qué hace por detrás (resumen) -->
+            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,18,0,0">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource H1}" Text="¿Qué hace por detrás?" />
+                    <TextBlock Style="{StaticResource Body}" Margin="0,10,0,0" Foreground="{StaticResource LilacSoftBrush}"
+                               Text="Sin tecnicismos: tu PC encuentra el mando, se saludan en privado, tu cuenta confirma que el mando es tuyo y, a partir de ahí, cada botón que pulsas se convierte en una tecla. La pantalla «Cómo funciona» te lo cuenta paso a paso y, mientras conectas, verás iluminarse cada paso en tiempo real." />
+                    <Button x:Name="btnHow2" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,18,0,0"
+                            Content="Ver el paso a paso" Click="How_Click" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Grid.Row="3" Style="{StaticResource Muted}" Margin="4,18,0,0"
+                       Text="Para uso personal con hardware que posees. Proyecto independiente, no afiliado a ninguna marca." />
+        </Grid>
+    </ScrollViewer>
+</UserControl>
