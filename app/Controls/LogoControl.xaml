@@ -52,12 +52,12 @@
             <Ellipse Canvas.Left="129" Canvas.Top="29" Width="22" Height="22" Fill="#F3C9AE" />
 
             <!-- Flor en la cabeza (5 pétalos + centro) -->
-            <Ellipse Canvas.Left="125.5" Canvas.Top="14"   Width="9" Height="9" Fill="{StaticResource PetalColor}" />
-            <Ellipse Canvas.Left="132.5" Canvas.Top="18"   Width="9" Height="9" Fill="{StaticResource BloomColor}" />
-            <Ellipse Canvas.Left="130.5" Canvas.Top="26"   Width="9" Height="9" Fill="{StaticResource PetalColor}" />
-            <Ellipse Canvas.Left="120.5" Canvas.Top="26"   Width="9" Height="9" Fill="{StaticResource BloomColor}" />
-            <Ellipse Canvas.Left="118.5" Canvas.Top="18"   Width="9" Height="9" Fill="{StaticResource PetalColor}" />
-            <Ellipse Canvas.Left="126.5" Canvas.Top="21.5" Width="6" Height="6" Fill="{StaticResource PollenColor}" />
+            <Ellipse Canvas.Left="125.5" Canvas.Top="14"   Width="9" Height="9" Fill="{StaticResource PetalBrush}" />
+            <Ellipse Canvas.Left="132.5" Canvas.Top="18"   Width="9" Height="9" Fill="{StaticResource BloomBrush}" />
+            <Ellipse Canvas.Left="130.5" Canvas.Top="26"   Width="9" Height="9" Fill="{StaticResource PetalBrush}" />
+            <Ellipse Canvas.Left="120.5" Canvas.Top="26"   Width="9" Height="9" Fill="{StaticResource BloomBrush}" />
+            <Ellipse Canvas.Left="118.5" Canvas.Top="18"   Width="9" Height="9" Fill="{StaticResource PetalBrush}" />
+            <Ellipse Canvas.Left="126.5" Canvas.Top="21.5" Width="6" Height="6" Fill="{StaticResource PollenBrush}" />
 
         </Canvas>
     </Viewbox>

@@ -43,6 +43,8 @@
     <SolidColorBrush x:Key="LilacBrush"    Color="{StaticResource LilacColor}" />
     <SolidColorBrush x:Key="LilacSoftBrush" Color="{StaticResource LilacSoftColor}" />
     <SolidColorBrush x:Key="BloomBrush"    Color="{StaticResource BloomColor}" />
+    <SolidColorBrush x:Key="PetalBrush"    Color="{StaticResource PetalColor}" />
+    <SolidColorBrush x:Key="PollenBrush"   Color="{StaticResource PollenColor}" />
     <SolidColorBrush x:Key="TextBrush"     Color="{StaticResource TextColor}" />
     <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
     <SolidColorBrush x:Key="SuccessBrush"  Color="{StaticResource SuccessColor}" />
@@ -51,7 +53,7 @@
     <!-- Degradado principal violeta → lila, usado en botones y cabeceras. -->
     <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="{StaticResource PrimaryColor}" Offset="0" />
-        <GradientStop Color="{StaticResource BloomColor}" Offset="1.2" />
+        <GradientStop Color="{StaticResource BloomColor}" Offset="1" />
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="HeaderGradient" StartPoint="0,0" EndPoint="1,0">
