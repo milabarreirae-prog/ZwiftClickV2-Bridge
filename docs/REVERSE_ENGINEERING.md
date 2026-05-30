@@ -1,4 +1,10 @@
-# Documentación de Ingeniería Inversa — Zwift Click V2
+# Documentación de Ingeniería Inversa — Zwift Play V1 (HISTÓRICO)
+
+> ⚠️ **DOCUMENTO HISTÓRICO.** Estas notas son de las primeras fases del proyecto y mezclan el
+> protocolo del Zwift Play 2023 (V1) con hipótesis tempranas sobre el Click V2 que después se
+> **refutaron** (AES-128-GCM, prefijo `01 02`, unlock local, etc.). Para el estado actual y
+> correcto del Click V2 ver [REVERSE_ENGINEERING_V2.md](REVERSE_ENGINEERING_V2.md) y
+> [docs/protocol/](protocol/README.md). Se conserva solo como referencia del trabajo previo.
 
 ## Descripción General
 

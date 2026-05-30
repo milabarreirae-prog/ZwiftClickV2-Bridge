@@ -159,15 +159,21 @@ public class ApplicationLayerParser
         };
     }
 
+    // Nombres según el catálogo autoritativo del decompile (docs/protocol/opcode-catalog.md).
     public static string SymbolicOpcode(byte opcode)
     {
         return opcode switch
         {
+            0x04 => "TRAINER_NOTIF",
+            0x07 => "TRAINER_CONFIG_STATUS",
+            0x08 => "ZWIFT_PLAY_NOTIF",
+            0x15 => "CONTROLLER_REQUEST",
+            0x19 => "RESET",
             0x23 => "BATTERY_STATUS",
+            0x28 => "CONTROLLER_NOTIFICATION",
+            0x37 => "ZWIFT_PLAY_DEVICE_STATUS",
             0x38 => "ZWIFT_CLICK_NOTIFICATION",
-            0x37 => "ZWIFT_PLAY_DEVICE_STATUS_OR_LEGACY_NOTIFICATION",
-            0x04 => "TRAINER_OR_FITNESS_COMMAND",
-            0x19 => "BATTERY_STATUS_LEGACY",
+            0xFF => "LOST_CONTROL",
             _ => $"UNKNOWN_0x{opcode:X2}"
         };
     }

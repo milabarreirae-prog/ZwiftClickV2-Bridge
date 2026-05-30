@@ -3,13 +3,18 @@ using System.Security.Cryptography;
 namespace ZwiftClickV2.Bridge.Crypto;
 
 /// <summary>
-/// Adaptador compatible con el proyecto para la implementación ZAP V2.
+/// Adaptador con estado (contadores tx/rx) sobre <see cref="ZapCrypto"/> para la sesión ZAP V2.
 /// </summary>
 public class ZPEncryptionV2
 {
-    private readonly ZapCrypto _crypto = new();
+    private readonly ZapCrypto _crypto;
     private uint _txCounter;
     private uint _rxCounter;
+
+    public ZPEncryptionV2(HkdfInfoMode infoMode = HkdfInfoMode.Empty)
+    {
+        _crypto = new ZapCrypto(infoMode);
+    }
 
     public bool IsInitialized => _crypto.IsInitialized;
     public byte[] AesKey => _crypto.AesKey.ToArray();
@@ -37,7 +42,9 @@ public class ZPEncryptionV2
             }
         });
 
-        byte[] sharedSecret = ourKey.DeriveKeyMaterial(peerEcdh.PublicKey);
+        // Secreto compartido = coordenada X cruda (estilo OpenSSL ECDH_compute_key),
+        // NO SHA256(X). Confirmado por el decompile; ver docs/protocol/ZAP_STATE_OF_THE_ART.md.
+        byte[] sharedSecret = ourKey.DeriveRawSecretAgreement(peerEcdh.PublicKey);
         if (sharedSecret.Length != 32)
             throw new CryptographicException($"Shared secret expected 32B, got {sharedSecret.Length}");
 

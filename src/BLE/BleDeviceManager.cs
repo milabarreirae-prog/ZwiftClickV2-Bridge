@@ -12,15 +12,21 @@ public class BleDeviceManager
 {
     private BluetoothLEDevice? _device;
 
-    // UUIDs Zwift
-    public static readonly Guid ZWIFT_SERVICE_UUID = Guid.Parse("0000fc82-0000-1000-8000-00805f9b34fb");
+    // UUIDs Zwift — ENLAZAR SIEMPRE POR UUID, NUNCA POR HANDLE (los handles ATT no son estables).
+    //
+    // El servicio ZAP propietario que expone CH02/03/04/100/101/102 es 00000001-19CA-...
+    // (handle vivo observado 0x0056). El servicio 0xFC82 es un wrapper "Zwift Ride" SECUNDARIO,
+    // no el que contiene estas características — ver docs/protocol/ZAP_STATE_OF_THE_ART.md.
+    public static readonly Guid ZWIFT_SERVICE_UUID = Guid.Parse("00000001-19ca-4651-86e5-fa29dcdd09d1");
+    public static readonly Guid ZWIFT_RIDE_WRAPPER_SERVICE_UUID = Guid.Parse("0000fc82-0000-1000-8000-00805f9b34fb");
     public static readonly Guid CH02_UUID = Guid.Parse("00000002-19ca-4651-86e5-fa29dcdd09d1");
     public static readonly Guid CH03_UUID = Guid.Parse("00000003-19ca-4651-86e5-fa29dcdd09d1");
     public static readonly Guid CH04_UUID = Guid.Parse("00000004-19ca-4651-86e5-fa29dcdd09d1");
-    public static readonly Guid CH06_UUID = Guid.Parse("00000006-19ca-4651-86e5-fa29dcdd09d1");
     public static readonly Guid CH100_UUID = Guid.Parse("00000100-19ca-4651-86e5-fa29dcdd09d1");
     public static readonly Guid CH101_UUID = Guid.Parse("00000101-19ca-4651-86e5-fa29dcdd09d1");
     public static readonly Guid CH102_UUID = Guid.Parse("00000102-19ca-4651-86e5-fa29dcdd09d1");
+    // CH06 (00000006-19CA-...) NO existe en el firmware del Click V2 (REFUTADO). El binario de la
+    // app declara el UUID pero el dispositivo no lo expone. No leer ni enlazar esta característica.
 
     public bool IsConnected => _device?.ConnectionStatus == BluetoothConnectionStatus.Connected;
 
@@ -102,14 +108,6 @@ public class BleDeviceManager
         byte[] data = new byte[reader.UnconsumedBufferLength];
         reader.ReadBytes(data);
         return data;
-    }
-
-    /// <summary>
-    /// Lee la característica 00000006 (datos de estado/info del dispositivo).
-    /// </summary>
-    public async Task<byte[]?> ReadCharacteristic06Async()
-    {
-        return await ReadCharacteristicAsync(ZWIFT_SERVICE_UUID, CH06_UUID);
     }
 
     /// <summary>

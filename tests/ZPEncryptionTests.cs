@@ -92,18 +92,30 @@ public class ZPEncryptionTests
     }
 
     [Fact]
-    public void V2_UsesExpectedHkdfParameters()
+    public void V2_DefaultHkdfInfo_IsEmpty()
     {
         using var a = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
         using var b = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
 
-        var zp = new ZPEncryptionV2();
+        var zp = new ZPEncryptionV2(); // default = HkdfInfoMode.Empty (evidencia del decompile)
         zp.Initialize(a, ExportPub(b));
 
-        Assert.Equal("handshake data", System.Text.Encoding.ASCII.GetString(zp.GetHkdfInfo()));
+        Assert.Empty(zp.GetHkdfInfo());
         Assert.Equal(128, zp.HkdfSalt.Length);
         Assert.Equal(32, zp.AesKey.Length);
         Assert.Equal(4, zp.IvBase.Length);
+    }
+
+    [Fact]
+    public void V2_LegacyHkdfInfo_IsHandshakeData()
+    {
+        using var a = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        using var b = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+
+        var zp = new ZPEncryptionV2(HkdfInfoMode.LegacyHandshakeData);
+        zp.Initialize(a, ExportPub(b));
+
+        Assert.Equal("handshake data", System.Text.Encoding.ASCII.GetString(zp.GetHkdfInfo()));
     }
 
     [Fact]

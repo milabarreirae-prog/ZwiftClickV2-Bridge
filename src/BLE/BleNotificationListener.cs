@@ -12,7 +12,7 @@ public sealed class BleNotificationContext
 
 /// <summary>
 /// Se suscribe a notificaciones/indicaciones de múltiples características GATT.
-/// Soporta CH02, CH04, CH102 y 00000006.
+/// Soporta CH02 (notify), CH04 (indicate) y CH100/101/102.
 /// </summary>
 public class BleNotificationListener
 {

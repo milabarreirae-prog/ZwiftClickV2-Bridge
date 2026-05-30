@@ -14,3 +14,28 @@ logs/
 # OS
 Thumbs.db
 .DS_Store
+
+# ── Seguridad: NUNCA publicar secretos ni capturas crudas ──────────────────
+# Tokens / credenciales
+.env
+.env.*
+*secret*
+*credential*
+*.token
+*token*.json
+# Capturas de tráfico (pueden contener tokens OAuth y datos del dispositivo)
+out/
+**/mitm/
+**/*captures*/
+*.har
+*.pcap
+*.pcapng
+*.etl
+# CA / claves del proxy MITM
+*.pem
+*.pfx
+*.key
+# Binarios propietarios de Zwift / decompile (no redistribuir)
+x.c
+**/ZwiftApp*
+**/*.wad
