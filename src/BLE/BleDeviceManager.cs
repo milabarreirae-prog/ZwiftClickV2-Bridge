@@ -124,15 +124,14 @@ public class BleDeviceManager
         const int maxAttempts = 8;
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            // (a) Camino directo: pedir EXACTAMENTE ese UUID, sin caché. Esto fuerza al stack de
-            //     Windows a descubrir el servicio propietario aunque la caché aún no lo tenga —
-            //     es lo que hace la app oficial y es más fiable que enumerar todo.
+            // (a) Camino directo: pedir EXACTAMENTE ese UUID, sin caché. Funciona si el servicio
+            //     es PRIMARIO. (En el Click V2 sobre Zwift Ride el ZAP es SECUNDARIO, ver (c).)
             try
             {
                 var direct = await _device.GetGattServicesForUuidAsync(serviceUuid, BluetoothCacheMode.Uncached);
                 if (direct.Status == GattCommunicationStatus.Success && direct.Services.Count > 0)
                 {
-                    Console.WriteLine($"   ✅ Servicio ZAP encontrado por UUID (intento {attempt}).");
+                    Console.WriteLine($"   ✅ Servicio ZAP encontrado por UUID/primario (intento {attempt}).");
                     return direct.Services[0];
                 }
             }
@@ -141,23 +140,25 @@ public class BleDeviceManager
                 Console.WriteLine($"   ⚠️ Intento {attempt}/{maxAttempts}: GetGattServicesForUuid: {ex.Message}");
             }
 
-            // (b) Camino de diagnóstico: enumerar TODOS los servicios (uncached) para registrar qué se ve.
+            // (b) Enumerar servicios PRIMARIOS (uncached). Búsqueda directa + diagnóstico.
+            GattDeviceService[] primaries = Array.Empty<GattDeviceService>();
             try
             {
                 var all = await _device.GetGattServicesAsync(BluetoothCacheMode.Uncached);
                 if (all.Status == GattCommunicationStatus.Success && all.Services != null)
                 {
-                    var match = all.Services.FirstOrDefault(s => s.Uuid == serviceUuid);
+                    primaries = all.Services.ToArray();
+                    var match = primaries.FirstOrDefault(s => s.Uuid == serviceUuid);
                     if (match != null)
                     {
-                        Console.WriteLine($"   ✅ Servicio ZAP encontrado al enumerar (intento {attempt}).");
+                        Console.WriteLine($"   ✅ Servicio ZAP encontrado al enumerar primarios (intento {attempt}).");
                         return match;
                     }
 
-                    string uuids = string.Join(", ", all.Services.Select(s => Short(s.Uuid)));
-                    Console.WriteLine($"   …intento {attempt}/{maxAttempts}: {all.Services.Count} servicios, sin el ZAP. [{uuids}]");
+                    string uuids = string.Join(", ", primaries.Select(s => Short(s.Uuid)));
+                    Console.WriteLine($"   …intento {attempt}/{maxAttempts}: {primaries.Length} primarios, sin el ZAP. [{uuids}]");
                     if (attempt == 1 || attempt == maxAttempts)
-                        onDiagnostic?.Invoke($"Servicios visibles ({all.Services.Count}): {uuids}");
+                        onDiagnostic?.Invoke($"Servicios primarios ({primaries.Length}): {uuids}");
                 }
                 else
                 {
@@ -169,6 +170,39 @@ public class BleDeviceManager
             catch (Exception ex)
             {
                 Console.WriteLine($"   ⚠️ Intento {attempt}/{maxAttempts}: GetGattServices: {ex.Message}");
+            }
+
+            // (c) CLAVE para el Click V2 sobre Zwift Ride: el servicio ZAP está ANIDADO como
+            //     SECUNDARIO dentro de otro (típicamente 0xFC82). WinRT no lo devuelve entre los
+            //     primarios → hay que recorrer los INCLUDED services de cada primario.
+            foreach (var parent in primaries)
+            {
+                try
+                {
+                    var inc = await parent.GetIncludedServicesForUuidAsync(serviceUuid, BluetoothCacheMode.Uncached);
+                    if (inc.Status == GattCommunicationStatus.Success && inc.Services.Count > 0)
+                    {
+                        Console.WriteLine($"   ✅ Servicio ZAP encontrado ANIDADO dentro de {Short(parent.Uuid)} (intento {attempt}).");
+                        onDiagnostic?.Invoke($"Servicio ZAP localizado dentro de {Short(parent.Uuid)} (servicio incluido).");
+                        return inc.Services[0];
+                    }
+
+                    // Diagnóstico: listar los incluidos que sí se ven (solo una vez).
+                    if (attempt == 1)
+                    {
+                        var allInc = await parent.GetIncludedServicesAsync(BluetoothCacheMode.Uncached);
+                        if (allInc.Status == GattCommunicationStatus.Success && allInc.Services.Count > 0)
+                        {
+                            string sub = string.Join(", ", allInc.Services.Select(s => Short(s.Uuid)));
+                            Console.WriteLine($"      ↳ incluidos en {Short(parent.Uuid)}: {sub}");
+                            onDiagnostic?.Invoke($"Dentro de {Short(parent.Uuid)}: {sub}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"   ⚠️ included de {Short(parent.Uuid)}: {ex.Message}");
+                }
             }
 
             await Task.Delay(800); // dar tiempo a que la conexión GATT se establezca/enumere

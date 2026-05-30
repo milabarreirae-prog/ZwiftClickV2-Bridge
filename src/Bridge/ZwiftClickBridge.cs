@@ -128,12 +128,11 @@ public sealed class ZwiftClickBridge : IDisposable
             onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
         if (service == null)
         {
-            Console.WriteLine("❌ Servicio ZAP (00000001-19CA-…) no encontrado.");
+            Console.WriteLine("❌ Servicio ZAP (00000001-19CA-…) no encontrado (ni primario ni anidado).");
             Report(BridgePhase.Failed,
-                "El mando se conectó pero Windows no listó su servicio. Esto suele pasar cuando el mando " +
-                "ya está enlazado/usado en otra app (móvil, Zwift, MyWoosh) o quedó emparejado en Windows. " +
-                "Cierra el mando en todo lo demás, quítalo de Configuración → Bluetooth si aparece emparejado, " +
-                "despiértalo pulsando un botón y reintenta.", true);
+                "El mando se conectó pero no pude localizar su canal de control. Busqué tanto en los " +
+                "servicios principales como anidados. Revisa el registro: ahí aparece qué expone tu mando. " +
+                "Si no aparece, prueba a apagar y encender el Bluetooth de Windows y reintenta.", true);
             return false;
         }
 
