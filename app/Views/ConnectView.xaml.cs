@@ -16,6 +16,8 @@ public partial class ConnectView : UserControl
     private BridgeRunner? _runner;
     private int _lastStep = -1;
     private int _buttonCount;
+    private string _calPlus = "sin calibrar";
+    private string _calMinus = "sin calibrar";
 
     public ConnectView()
     {
@@ -139,10 +141,17 @@ public partial class ConnectView : UserControl
         btnStop.IsEnabled = true;
         SetStatus("Conectando…", error: false);
 
+        btnCalPlus.IsEnabled = false;
+        btnCalMinus.IsEnabled = false;
+        _calPlus = "sin calibrar";
+        _calMinus = "sin calibrar";
+        UpdateCalLabel();
+
         _runner = new BridgeRunner();
         _runner.ProgressChanged += OnProgress;
         _runner.ButtonEmitted += OnButton;
         _runner.DiagnosticFrame += OnDiagnosticFrame;
+        _runner.CalibrationFinished += OnCalibrationFinished;
         _runner.Finished += OnFinished;
         _runner.Start(options);
     }
@@ -275,14 +284,57 @@ public partial class ConnectView : UserControl
         {
             btnStart.IsEnabled = false;
             btnStop.IsEnabled = true;
+            btnCalPlus.IsEnabled = true;
+            btnCalMinus.IsEnabled = true;
             UpdateSteps(5, error: false);
-            SetStatus("¡Conectado! Pulsa los botones de tu mando y míralos aquí.", error: false, success: true);
+            SetStatus("¡Conectado! Calibra tus botones: pulsa «Calibrar +» y aprieta el botón de subir.", error: false, success: true);
         }
         else
         {
             btnStart.IsEnabled = true;
             btnStop.IsEnabled = false;
+            btnCalPlus.IsEnabled = false;
+            btnCalMinus.IsEnabled = false;
         }
+    }
+
+    // ── Calibración ─────────────────────────────────────────────────────────
+    private void CalPlus_Click(object sender, RoutedEventArgs e)
+    {
+        _runner?.StartCalibration("plus");
+        btnCalPlus.IsEnabled = false; btnCalMinus.IsEnabled = false;
+    }
+
+    private void CalMinus_Click(object sender, RoutedEventArgs e)
+    {
+        _runner?.StartCalibration("minus");
+        btnCalPlus.IsEnabled = false; btnCalMinus.IsEnabled = false;
+    }
+
+    private void OnCalibrationFinished(string action, string signature, bool ok)
+    {
+        btnCalPlus.IsEnabled = true;
+        btnCalMinus.IsEnabled = true;
+        string shortSig = signature.Length > 16 ? signature[..16] + "…" : signature;
+        if (action == "plus") _calPlus = ok ? shortSig : "sin calibrar";
+        else _calMinus = ok ? shortSig : "sin calibrar";
+        UpdateCalLabel();
+        AppendLog(ok
+            ? $"✅ Botón «{(action == "plus" ? "+" : "−")}» calibrado (firma {shortSig})."
+            : $"No detecté un botón claro para «{(action == "plus" ? "+" : "−")}». Reintenta y aprieta firme varias veces.",
+            error: !ok);
+    }
+
+    private void UpdateCalLabel()
+        => lblCal.Text = $"+ : {_calPlus}   ·   − : {_calMinus}";
+
+    private void CopyLog_Click(object sender, RoutedEventArgs e)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var child in spLog.Children)
+            if (child is TextBlock tb) sb.AppendLine(tb.Text);
+        try { Clipboard.SetText(sb.ToString()); SetStatus("Registro copiado al portapapeles.", error: false, success: true); }
+        catch { SetStatus("No pude copiar el registro.", error: true); }
     }
 
     // ── Utilidades de UI ────────────────────────────────────────────────────

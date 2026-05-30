@@ -95,6 +95,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -122,8 +123,24 @@
                 </Grid>
             </Border>
 
+            <!-- Calibración de botones -->
+            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0" VerticalAlignment="Top">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Muted}" FontWeight="SemiBold" Text="CALIBRAR BOTONES" />
+                    <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,4,0,8"
+                               Text="Pulsa «Calibrar +» y, cuando se te pida, aprieta varias veces el botón que quieres para SUBIR de marcha. Repite con «Calibrar −» para BAJAR." />
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="btnCalPlus" Style="{StaticResource GhostButton}" Padding="14,8" Content="Calibrar +" IsEnabled="False" Click="CalPlus_Click" />
+                        <Button x:Name="btnCalMinus" Style="{StaticResource GhostButton}" Padding="14,8" Margin="8,0,0,0" Content="Calibrar −" IsEnabled="False" Click="CalMinus_Click" />
+                        <Button x:Name="btnCopyLog" Style="{StaticResource GhostButton}" Padding="14,8" Margin="8,0,0,0" Content="Copiar registro" Click="CopyLog_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="lblCal" Style="{StaticResource Muted}" FontSize="11.5" Margin="0,8,0,0"
+                               Text="+ : sin calibrar   ·   − : sin calibrar" />
+                </StackPanel>
+            </Border>
+
             <!-- Registro -->
-            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0">
+            <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource Muted}" FontWeight="SemiBold" Margin="0,0,0,8" Text="REGISTRO" />
                     <ScrollViewer x:Name="scLog" VerticalScrollBarVisibility="Auto">

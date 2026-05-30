@@ -46,6 +46,8 @@ public sealed class BridgeRunner
     public event Action<BridgeButtonEvent>? ButtonEmitted;
     /// <summary>Diagnóstico: hex crudo de cada trama post-unlock (para mapear botones).</summary>
     public event Action<string>? DiagnosticFrame;
+    /// <summary>Resultado de calibración: (acción, firma, éxito).</summary>
+    public event Action<string, string, bool>? CalibrationFinished;
     /// <summary>Se dispara al terminar el arranque: éxito = puente operativo (escuchando botones).</summary>
     public event Action<bool>? Finished;
 
@@ -65,6 +67,7 @@ public sealed class BridgeRunner
             bridge.ProgressChanged += p => _ui.BeginInvoke(() => ProgressChanged?.Invoke(p));
             bridge.ButtonEmitted += b => _ui.BeginInvoke(() => ButtonEmitted?.Invoke(b));
             bridge.DiagnosticFrame += f => _ui.BeginInvoke(() => DiagnosticFrame?.Invoke(f));
+            bridge.CalibrationFinished += (a, s, ok) => _ui.BeginInvoke(() => CalibrationFinished?.Invoke(a, s, ok));
             _bridge = bridge;
 
             bool ok = await bridge.StartAsync(options.DeviceName, token);
@@ -98,6 +101,12 @@ public sealed class BridgeRunner
         _bridge = null;
         IsRunning = false;
     }
+
+    /// <summary>Inicia la calibración de un botón ("plus" / "minus"). Requiere el puente operativo.</summary>
+    public void StartCalibration(string action) => _bridge?.StartCalibration(action);
+
+    /// <summary>Olvida el mapeo aprendido.</summary>
+    public void ClearCalibration() => _bridge?.ClearCalibration();
 
     private static async Task<string?> ResolveTokenAsync(RunOptions o)
     {
