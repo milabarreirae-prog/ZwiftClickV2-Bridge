@@ -261,10 +261,11 @@ public sealed class ZwiftClickBridge : IDisposable
         SetupSessionBakeoff(challenge.DevicePublicKeyCompressed);
         _unlocked = true;
 
-        // Pre-sembrar el keepalive conocido como baseline con cuenta alta para que nunca sea elegido
-        // durante calibración, incluso si esta comienza de inmediato antes de acumular observaciones.
+        // Pre-sembrar el keepalive puro como baseline con cuenta alta: nunca se elegirá en calibración
+        // aunque ésta comience antes de haber acumulado observaciones en reposo.
+        // NOTA: 08001064180020 NO se pre-siembra porque aparece tanto como keepalive como botón −;
+        // el aprendiz de baseline lo classifica correctamente con las primeras observaciones reales.
         _sigBaseline["080010"] = 999;
-        _sigBaseline["08001064180020"] = 0; // reset: esta firma SÍ es el botón − (no keepalive)
 
         // Pre-sembrar el keepalive como baseline conocido para que la calibración nunca lo elija.
         // "080010" es la trama de reposo/heartbeat del Click V2 (confirmado en hardware).
