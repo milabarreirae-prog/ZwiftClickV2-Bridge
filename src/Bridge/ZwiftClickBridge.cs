@@ -261,6 +261,15 @@ public sealed class ZwiftClickBridge : IDisposable
         SetupSessionBakeoff(challenge.DevicePublicKeyCompressed);
         _unlocked = true;
 
+        // Pre-sembrar el keepalive conocido como baseline con cuenta alta para que nunca sea elegido
+        // durante calibración, incluso si esta comienza de inmediato antes de acumular observaciones.
+        _sigBaseline["080010"] = 999;
+        _sigBaseline["08001064180020"] = 0; // reset: esta firma SÍ es el botón − (no keepalive)
+
+        // Pre-sembrar el keepalive como baseline conocido para que la calibración nunca lo elija.
+        // "080010" es la trama de reposo/heartbeat del Click V2 (confirmado en hardware).
+        _sigBaseline["080010"] = 999;
+
         Console.WriteLine($"\n✅ UNLOCK COMPLETO ({sw.ElapsedMilliseconds}ms). Escuchando botones en CH02…");
         Console.WriteLine("   (la cripto de sesión se auto-resolverá con las primeras tramas cifradas)");
         Report(BridgePhase.Listening, "¡Listo! Mando desbloqueado. Calibra tus botones (botones «Calibrar +/−») pulsándolos cuando se te pida.");
@@ -431,8 +440,12 @@ public sealed class ZwiftClickBridge : IDisposable
             action = _calAction;
             foreach (var kv in _calCounts)
             {
-                bool isIdle = _sigBaseline.TryGetValue(kv.Key, out var bc) && bc >= 3; // reposo/keepalive
+                // Excluir keepalive/reposo (baseline con muchas observaciones).
+                bool isIdle = _sigBaseline.TryGetValue(kv.Key, out var bc) && bc >= 3;
                 if (isIdle) continue;
+                // Excluir firmas ya asignadas a OTRA acción (evita solapamiento entre + y −).
+                bool takenByOther = _sigToAction.TryGetValue(kv.Key, out var existingAction) && existingAction != action;
+                if (takenByOther) continue;
                 if (kv.Value > bestCount) { bestCount = kv.Value; best = kv.Key; }
             }
             if (best != null)
