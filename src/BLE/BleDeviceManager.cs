@@ -11,6 +11,7 @@ namespace ZwiftClickV2.Bridge.BLE;
 public class BleDeviceManager
 {
     private BluetoothLEDevice? _device;
+    private GattSession? _session;
 
     // UUIDs Zwift — ENLAZAR SIEMPRE POR UUID, NUNCA POR HANDLE (los handles ATT no son estables).
     //
@@ -85,18 +86,108 @@ public class BleDeviceManager
         finally { watcher.Stop(); }
 
         _device = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+        if (_device == null)
+        {
+            Console.WriteLine("   ❌ No se pudo abrir el dispositivo desde su dirección.");
+            return null;
+        }
         Console.WriteLine($"   📡 Conectado: {_device.Name} (Paired: {_device.DeviceInformation.Pairing.IsPaired})");
+
+        // Forzar/mantener la conexión GATT. FromBluetoothAddressAsync NO conecta por sí solo: la
+        // conexión es perezosa y se establece en la primera operación GATT. Abrir una GattSession con
+        // MaintainConnection=true pide al stack de Windows que conecte y mantenga el enlace, lo que
+        // hace que el descubrimiento de servicios sea fiable (sin esto, el primer GetGattServices
+        // suele llegar antes de que el servicio propietario esté enumerado → "servicio no encontrado").
+        try
+        {
+            _session = await GattSession.FromDeviceIdAsync(_device.BluetoothDeviceId);
+            _session.MaintainConnection = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"   ⚠️ No se pudo abrir GattSession (se continuará igualmente): {ex.Message}");
+        }
+
         return _device;
     }
 
     /// <summary>
-    /// Obtiene todos los servicios GATT del dispositivo.
+    /// Obtiene un servicio GATT por UUID, de forma ROBUSTA: lo pide sin caché, comprueba el estado
+    /// y REINTENTA mientras la conexión se establece (el descubrimiento GATT en Windows es perezoso
+    /// y el servicio propietario puede tardar en aparecer). <paramref name="onDiagnostic"/> recibe
+    /// mensajes de diagnóstico (p. ej. los servicios que sí se ven) para mostrarlos en el registro.
     /// </summary>
-    public async Task<GattDeviceService?> GetServiceAsync(Guid serviceUuid)
+    public async Task<GattDeviceService?> GetServiceAsync(Guid serviceUuid, Action<string>? onDiagnostic = null)
     {
         if (_device == null) throw new InvalidOperationException("Not connected");
-        var result = await _device.GetGattServicesAsync();
-        return result.Services?.FirstOrDefault(s => s.Uuid == serviceUuid);
+
+        const int maxAttempts = 8;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            // (a) Camino directo: pedir EXACTAMENTE ese UUID, sin caché. Esto fuerza al stack de
+            //     Windows a descubrir el servicio propietario aunque la caché aún no lo tenga —
+            //     es lo que hace la app oficial y es más fiable que enumerar todo.
+            try
+            {
+                var direct = await _device.GetGattServicesForUuidAsync(serviceUuid, BluetoothCacheMode.Uncached);
+                if (direct.Status == GattCommunicationStatus.Success && direct.Services.Count > 0)
+                {
+                    Console.WriteLine($"   ✅ Servicio ZAP encontrado por UUID (intento {attempt}).");
+                    return direct.Services[0];
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ⚠️ Intento {attempt}/{maxAttempts}: GetGattServicesForUuid: {ex.Message}");
+            }
+
+            // (b) Camino de diagnóstico: enumerar TODOS los servicios (uncached) para registrar qué se ve.
+            try
+            {
+                var all = await _device.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+                if (all.Status == GattCommunicationStatus.Success && all.Services != null)
+                {
+                    var match = all.Services.FirstOrDefault(s => s.Uuid == serviceUuid);
+                    if (match != null)
+                    {
+                        Console.WriteLine($"   ✅ Servicio ZAP encontrado al enumerar (intento {attempt}).");
+                        return match;
+                    }
+
+                    string uuids = string.Join(", ", all.Services.Select(s => Short(s.Uuid)));
+                    Console.WriteLine($"   …intento {attempt}/{maxAttempts}: {all.Services.Count} servicios, sin el ZAP. [{uuids}]");
+                    if (attempt == 1 || attempt == maxAttempts)
+                        onDiagnostic?.Invoke($"Servicios visibles ({all.Services.Count}): {uuids}");
+                }
+                else
+                {
+                    Console.WriteLine($"   …intento {attempt}/{maxAttempts}: estado {all.Status}.");
+                    if (attempt == 1)
+                        onDiagnostic?.Invoke($"El mando aún no responde a la lista de servicios (estado {all.Status}). Reintentando…");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   ⚠️ Intento {attempt}/{maxAttempts}: GetGattServices: {ex.Message}");
+            }
+
+            await Task.Delay(800); // dar tiempo a que la conexión GATT se establezca/enumere
+        }
+
+        return null;
+    }
+
+    /// <summary>Forma corta de un UUID para diagnóstico: el grupo significativo o el UUID entero.</summary>
+    private static string Short(Guid g)
+    {
+        string s = g.ToString();
+        // UUIDs base de 16 bits (0000XXXX-0000-1000-8000-00805f9b34fb) → "0xXXXX".
+        if (s.EndsWith("-0000-1000-8000-00805f9b34fb", StringComparison.OrdinalIgnoreCase))
+            return "0x" + s.Substring(4, 4);
+        // UUIDs propietarios Zwift (0000000X-19ca-…) → "ZAP:000000X".
+        if (s.Contains("19ca-4651-86e5-fa29dcdd09d1", StringComparison.OrdinalIgnoreCase))
+            return "ZAP:" + s.Substring(0, 8);
+        return s.Substring(0, 8) + "…";
     }
 
     /// <summary>
@@ -106,7 +197,7 @@ public class BleDeviceManager
     {
         var service = await GetServiceAsync(serviceUuid);
         if (service == null) return null;
-        var chars = await service.GetCharacteristicsAsync();
+        var chars = await service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
         return chars.Characteristics.FirstOrDefault(c => c.Uuid == characteristicUuid);
     }
 
@@ -131,6 +222,8 @@ public class BleDeviceManager
     /// </summary>
     public void Disconnect()
     {
+        _session?.Dispose();
+        _session = null;
         _device?.Dispose();
         _device = null;
     }
