@@ -74,9 +74,6 @@ public static class ZPEncryptionFactory
             _ => throw new ArgumentException($"Unsupported protocol version: {version}")
         };
     }
-
-    /// <summary>Envuelve una instancia V2 ya inicializada en la interfaz <see cref="IZPEncryption"/>.</summary>
-    public static IZPEncryption CreateV2Adapter(ZPEncryptionV2 crypto) => new ZPEncryptionAdapterV2(crypto);
 }
 
 /// <summary>

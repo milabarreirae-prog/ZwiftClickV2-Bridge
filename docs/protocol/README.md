@@ -38,5 +38,5 @@ Protocol (ZAP)** usado por el Zwift Click V2 (2025). Cada afirmación está grad
 **Resuelto.** El dispositivo genera el reto completo `{pubkey, id, firma}` y lo emite **en claro**
 por CH02 (`FF 03 00 ‖ 82B`); el bridge lo reenvía verbatim con el Bearer del usuario → `204` →
 `FF 04 00`. El antiguo "gran desconocido" (origen de los campos 2 y 3) queda cerrado: los genera el
-dispositivo. Lo único pendiente es la cripto de sesión post-unlock (decodificar botones). Ver
-[unlock-flow.md](unlock-flow.md).
+dispositivo. La cripto de sesión post-unlock (para decodificar botones) se auto-resuelve por bake-off
+usando el tag AES-CCM como oráculo. Ver [unlock-flow.md](unlock-flow.md).

@@ -122,6 +122,65 @@ public class UnlockChainTests
         Assert.Equal("AT123", token);
     }
 
+    // ── SessionKeyBakeoff (oráculo por tag CCM) ──────────────────────
+
+    [Fact]
+    public void SessionKeyBakeoff_ResolvesTheCandidateThatEncryptedThePacket()
+    {
+        using var ourKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        using var deviceKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        byte[] devicePub64 = RawOf(deviceKey);
+        byte[] ourPub64 = RawOf(ourKey);
+
+        var candidates = SessionKeyBakeoff.BuildCandidates(ourKey, devicePub64, ourPub64);
+        Assert.Equal(4, candidates.Count);
+
+        // Elegimos un candidato "verdad" y fabricamos un paquete [4B counter][ct][4B tag] con su clave.
+        var truth = candidates[2];
+        byte[] plain = new byte[] { 0x38, 0x01, 0x00 }; // ZWIFT_CLICK_NOTIFICATION + datos
+        byte[] packet = EncryptPacket(truth, counter: 5, plain);
+
+        var winner = SessionKeyBakeoff.Resolve(candidates, new[] { packet }, out byte[] recovered);
+
+        Assert.NotNull(winner);
+        Assert.Equal(truth.Label, winner!.Label);   // resolvió exactamente el candidato correcto
+        Assert.Equal(plain, recovered);              // y recuperó el plaintext
+    }
+
+    [Fact]
+    public void SessionKeyBakeoff_ReturnsNullWhenNoCandidateDecrypts()
+    {
+        using var ourKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        using var deviceKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+        var candidates = SessionKeyBakeoff.BuildCandidates(ourKey, RawOf(deviceKey), RawOf(ourKey));
+
+        byte[] garbage = Enumerable.Range(0, 16).Select(i => (byte)(i * 7)).ToArray();
+        Assert.Null(SessionKeyBakeoff.Resolve(candidates, new[] { garbage }, out _));
+    }
+
+    private static byte[] RawOf(ECDiffieHellman k)
+    {
+        var p = k.ExportParameters(false);
+        byte[] raw = new byte[64];
+        Array.Copy(p.Q.X!, 0, raw, 0, 32);
+        Array.Copy(p.Q.Y!, 0, raw, 32, 32);
+        return raw;
+    }
+
+    private static byte[] EncryptPacket(SessionKeyBakeoff.Candidate c, uint counter, byte[] plaintext)
+    {
+        byte[] counterLe = { (byte)counter, (byte)(counter >> 8), (byte)(counter >> 16), (byte)(counter >> 24) };
+        byte[] nonce = new byte[8];
+        Array.Copy(c.IvBase, 0, nonce, 0, 4);
+        Array.Copy(counterLe, 0, nonce, 4, 4);
+
+        byte[] ct = new byte[plaintext.Length];
+        byte[] tag = new byte[4];
+        using var ccm = new AesCcm(c.Key);
+        ccm.Encrypt(nonce, plaintext, ct, tag);
+        return counterLe.Concat(ct).Concat(tag).ToArray();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────
 
     private static byte[] RawPubKey(out ECParameters p)

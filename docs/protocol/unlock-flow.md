@@ -62,8 +62,15 @@ usuario y una validación del servidor. Lo central del hallazgo:
 - Login con la cuenta del usuario: [`src/Auth/ZwiftOAuthClient.cs`](../../src/Auth/ZwiftOAuthClient.cs) (ver [zwift-login.md](zwift-login.md)).
 - Orquestación BLE: [`src/Bridge/ZwiftClickBridge.cs`](../../src/Bridge/ZwiftClickBridge.cs).
 
-## Pendiente (solo post-unlock)
+## Cripto de sesión post-unlock (auto-resuelta por bake-off)
 
-- Decodificar CH02 tras el unlock (AES-256-CCM): derivar la clave de sesión con ECDH (priv local +
-  **campo 1 descomprimido**) y zanjar HKDF-info / modo ECDH usando el reto en claro como oráculo
-  autovalidante. Necesario solo para botones/telemetría, **no** para el unlock.
+Decodificar CH02 cifrado tras el unlock requiere zanjar dos parámetros que el estático dejó abiertos:
+el modo de derivación ECDH (X cruda vs SHA256) y el `info` de HKDF (vacío vs `"handshake data"`). En
+vez de adivinar, el bridge construye los **4 candidatos** y deja que la **validez del tag AES-CCM**
+sea el oráculo: el candidato que descifra limpiamente la primera notificación real de CH02 es el
+correcto (clave equivocada → tag inválido → descarte). La pubkey del dispositivo se obtiene
+descomprimiendo el campo 1 del reto (X + paridad → Y).
+
+Implementación: [`src/Crypto/SessionKeyBakeoff.cs`](../../src/Crypto/SessionKeyBakeoff.cs), integrado en
+el bridge (se resuelve solo con el tráfico real). Equivale al `--hkdf-bakeoff` del probe de
+investigación. **Esto no afecta al unlock** (que es en claro); solo a la decodificación de botones.

@@ -26,7 +26,7 @@ public static class Program
 
             case "--diagnose":
             case "-d":
-                return await RunBridgeAsync(GetDeviceNameArg(args), accessToken: null, hkdfMode, emulateKeyboard: false);
+                return await RunBridgeAsync(GetDeviceNameArg(args), accessToken: null, emulateKeyboard: false);
 
             case "--unlock":
             case "--bridge":
@@ -40,7 +40,7 @@ public static class Program
                     Console.WriteLine("   o ejecuta en una terminal interactiva para introducir tus credenciales.");
                     return 1;
                 }
-                return await RunBridgeAsync(GetDeviceNameArg(args), token, hkdfMode, emulateKeyboard: !noKeyboard);
+                return await RunBridgeAsync(GetDeviceNameArg(args), token, emulateKeyboard: !noKeyboard);
             }
 
             case "--help":
@@ -79,9 +79,9 @@ public static class Program
         return null;
     }
 
-    private static async Task<int> RunBridgeAsync(string deviceName, string? accessToken, HkdfInfoMode hkdfMode, bool emulateKeyboard)
+    private static async Task<int> RunBridgeAsync(string deviceName, string? accessToken, bool emulateKeyboard)
     {
-        using var bridge = new ZwiftClickBridge(hkdfMode, emulateKeyboard);
+        using var bridge = new ZwiftClickBridge(emulateKeyboard);
         bool success = await bridge.StartAsync(deviceName, accessToken);
 
         if (success)
@@ -152,7 +152,8 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("Flags:");
         Console.WriteLine("  --no-keyboard         No emular teclas (solo registrar eventos)");
-        Console.WriteLine("  --legacy-hkdf-info    Usar HKDF info = \"handshake data\" (V1) en vez de vacío");
+        Console.WriteLine("  --legacy-hkdf-info    Self-test con HKDF info = \"handshake data\" (V1) en vez de vacío.");
+        Console.WriteLine("                        (El bridge real auto-resuelve la cripto de sesión por bake-off.)");
         Console.WriteLine();
         Console.WriteLine("Cuenta Zwift (diseño ético — login con TU cuenta, nunca un token embebido):");
         Console.WriteLine("  El unlock es server-backed y requiere el token de tu propia cuenta Zwift.");

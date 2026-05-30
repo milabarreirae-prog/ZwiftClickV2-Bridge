@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
-using System.Text;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using ZwiftClickV2.Bridge.Auth;
 using ZwiftClickV2.Bridge.BLE;
@@ -34,14 +33,15 @@ public sealed class ZwiftClickBridge : IDisposable
     private readonly BleNotificationListener _listener = new();
     private readonly KeyboardEmulator _keyboard = new();
     private readonly StructuredLogger _logger = new();
-    private readonly HkdfInfoMode _hkdfInfoMode;
     private readonly bool _emulateKeyboard;
 
-    private ZPEncryptionV2? _crypto;
-    private ZopSequencer? _sequencer;
-    private ApplicationLayerParser? _appParser;
     private ECDiffieHellman? _ourKey;
     private byte[]? _ourPubKey65;
+
+    // Cripto de sesión post-unlock: los candidatos del bake-off y el ganador (auto-resuelto del wire).
+    private IReadOnlyList<SessionKeyBakeoff.Candidate>? _candidates;
+    private SessionKeyBakeoff.Candidate? _session;
+    private readonly List<byte[]> _postUnlockBuffer = new();
 
     private readonly TaskCompletionSource<DeviceAuthChallenge> _challengeTcs =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -50,13 +50,12 @@ public sealed class ZwiftClickBridge : IDisposable
 
     private const int ChallengeTimeoutMs = 20_000;
 
-    public ZwiftClickBridge(HkdfInfoMode hkdfInfoMode = HkdfInfoMode.Empty, bool emulateKeyboard = true)
+    public ZwiftClickBridge(bool emulateKeyboard = true)
     {
-        _hkdfInfoMode = hkdfInfoMode;
         _emulateKeyboard = emulateKeyboard;
     }
 
-    public bool IsOperational => _ble.IsConnected && _crypto?.IsInitialized == true;
+    public bool IsOperational => _ble.IsConnected && _unlocked;
 
     /// <summary>
     /// Ejecuta la cadena de unlock. <paramref name="accessToken"/> es el Bearer de la cuenta Zwift
@@ -144,10 +143,11 @@ public sealed class ZwiftClickBridge : IDisposable
         Console.WriteLine("\n[4/4] Unlock BLE: write FF 04 00 → CH03…");
         await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, ZapCommands.UnlockConfirm);
 
-        InitializeSession(challenge.DevicePublicKeyCompressed);
+        SetupSessionBakeoff(challenge.DevicePublicKeyCompressed);
         _unlocked = true;
 
         Console.WriteLine($"\n✅ UNLOCK COMPLETO ({sw.ElapsedMilliseconds}ms). Escuchando botones en CH02…");
+        Console.WriteLine("   (la cripto de sesión se auto-resolverá con las primeras tramas cifradas)");
         return true;
     }
 
@@ -175,16 +175,36 @@ public sealed class ZwiftClickBridge : IDisposable
             return;
         }
 
-        // Tras el unlock: tráfico cifrado → botones.
-        if (_appParser == null) return;
-        var parsed = _appParser.Parse(ApplicationLayerParser.HandleCH02, data);
-        _logger.Log("app_rx", "rx", parsed.Channel.ToString(), parsed.Plaintext,
-            $"opcode=0x{parsed.ApplicationOpcode:X2} {parsed.SymbolicName} encrypted={parsed.WasEncrypted}");
+        // Tras el unlock: tráfico cifrado. Hasta resolver la cripto, acumular y probar el bake-off.
+        if (_session == null)
+        {
+            if (_candidates == null) return;
+            _postUnlockBuffer.Add(data);
+            _session = SessionKeyBakeoff.Resolve(_candidates, _postUnlockBuffer, out _);
+            if (_session == null) return; // seguir acumulando hasta que una trama valide su tag
 
-        if (!parsed.WasEncrypted || parsed.ApplicationOpcode != ZapWireOpcode.ZwiftClickNotification)
+            Console.WriteLine($"   🔓 Cripto de sesión resuelta por bake-off: [{_session.Label}]");
+            _logger.LogInfo($"Session crypto resolved: {_session.Label}");
+            foreach (byte[] buffered in _postUnlockBuffer)
+                EmitButton(buffered);
+            _postUnlockBuffer.Clear();
+            return;
+        }
+
+        EmitButton(data);
+    }
+
+    /// <summary>Descifra una trama CH02 con el candidato resuelto y, si es un evento de botón, emula la tecla.</summary>
+    private void EmitButton(byte[] frame)
+    {
+        if (_session == null || !_session.TryDecrypt(frame, out byte[] plaintext) || plaintext.Length == 0)
             return;
 
-        var evt = ZopPeripheralEvent.Parse(parsed.Plaintext.AsSpan(1).ToArray());
+        _logger.Log("app_rx", "rx", "CH02", plaintext, $"opcode=0x{plaintext[0]:X2}");
+        if (plaintext[0] != ZapWireOpcode.ZwiftClickNotification)
+            return;
+
+        var evt = ZopPeripheralEvent.Parse(plaintext.AsSpan(1).ToArray());
         byte vk = evt.ToVirtualKey();
         if (vk != 0 && _emulateKeyboard)
         {
@@ -200,16 +220,14 @@ public sealed class ZwiftClickBridge : IDisposable
         _logger.Log("handshake_rx", "rx", "CH04", data, "device reply (58 02 status no es fatal)");
     }
 
-    private void InitializeSession(byte[] deviceCompressedPubKey33)
+    private void SetupSessionBakeoff(byte[] deviceCompressedPubKey33)
     {
         // La pubkey del dispositivo para el ECDH se recupera descomprimiendo el campo 1 del reto.
+        // No fijamos un único modo cripto: construimos los 4 candidatos del bake-off y dejamos que
+        // la validez del tag AES-CCM resuelva cuál es el correcto con las tramas reales de CH02.
         byte[] devicePubKey64 = EcPoint.Decompress(deviceCompressedPubKey33);
-        _crypto = new ZPEncryptionV2(_hkdfInfoMode);
-        _crypto.Initialize(_ourKey!, devicePubKey64, devicePubKey64, _ourPubKey65!);
-        var adapter = ZPEncryptionFactory.CreateV2Adapter(_crypto);
-        _sequencer = new ZopSequencer(adapter);
-        _appParser = new ApplicationLayerParser(adapter, _sequencer);
-        Console.WriteLine("   ✅ Sesión AES-256-CCM derivada (pubkey del device descomprimida del reto).");
+        byte[] ourPub64 = _ourPubKey65!.AsSpan(1, 64).ToArray();
+        _candidates = SessionKeyBakeoff.BuildCandidates(_ourKey!, devicePubKey64, ourPub64);
     }
 
     public void Stop()

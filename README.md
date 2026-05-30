@@ -20,8 +20,8 @@ ECDH, unlock server-backed con **tu propia cuenta Zwift**, y sesión cifrada AES
 | Captura del reto + POST d-lock + `FF 04 00` | ✅ |
 | Login con la cuenta del usuario (password / refresh) | ✅ |
 | **Unlock de extremo a extremo (sin la app oficial)** | ✅ **validado en hardware** |
-| Criptografía de sesión (ECDH raw → HKDF 128B → AES-256-CCM) | ✅ self-test; ⚠️ `HkdfInfoMode` por confirmar contra device |
-| Decodificación de botones post-unlock | 🔬 depende de zanjar `HkdfInfoMode` |
+| Criptografía de sesión (AES-256-CCM) | ✅ self-test |
+| Decodificación de botones post-unlock | ✅ auto-resuelta por bake-off (tag CCM como oráculo); a confirmar en hardware |
 
 ### Cómo funciona el unlock (resuelto)
 

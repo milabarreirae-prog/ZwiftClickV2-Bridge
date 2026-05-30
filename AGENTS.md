@@ -24,7 +24,7 @@ dotnet run --project src -- --bridge           # unlock + teclado (requiere devi
 | `Auth/` | `ZwiftOAuthClient` (login cuenta del usuario), `DeviceUnlockClient` (POST d-lock), `UnlockCoordinator`, `DeviceAuthChallenge` (protobuf). Nunca embebe tokens. |
 | `BLE/` | `BleDeviceManager` (scan/connect, enlace **por UUID**), writer y listener. |
 | `Bridge/` | `ZwiftClickBridge` (orquestador único del flujo). `KeyboardEmulator` (`SendInput`). |
-| `Crypto/` | `ZapCrypto` (HKDF + AES-256-CCM), `ZPEncryptionV2` (contadores + ECDH raw), `ZPEncryptionV1` (Play legacy), `EcPoint` (compresión 64B→33B). |
+| `Crypto/` | `ZapCrypto` (HKDF + AES-256-CCM), `ZPEncryptionV2` (contadores + ECDH raw), `SessionKeyBakeoff` (resuelve ECDH/HKDF post-unlock por tag CCM), `EcPoint` (compresión/descompresión EC), `ZPEncryptionV1` (Play legacy). |
 | `Protocol/` | `ZapCommands` (handshake `02 03`, `FF 04 00`), `ApplicationLayerParser`, `ZopSequencer`, `ZapWireOpcode`, mensajes. |
 | `Logging/` | `StructuredLogger` → `logs/session_*.json`. |
 
@@ -48,10 +48,11 @@ Puntos clave de implementación: el bridge **no construye ni firma** los campos 
 (`ResolveTokenFromEnvAsync`: ACCESS_TOKEN → USERNAME/PASSWORD → REFRESH_TOKEN). La pubkey del device
 para la sesión se obtiene con `EcPoint.Decompress` del campo 1 del reto.
 
-### Pendiente (solo post-unlock)
+### Cripto de sesión post-unlock
 
-Decodificar CH02 cifrado tras el unlock (botones): zanjar `HkdfInfoMode` (vacío vs `"handshake data"`)
-con el reto en claro como oráculo. No afecta al unlock.
+Se auto-resuelve por **bake-off** (`SessionKeyBakeoff`): 4 candidatos (ECDH X-cruda/SHA256 × HKDF
+info vacío/"handshake data"); el tag AES-CCM válido elige el correcto con el tráfico real de CH02.
+Integrado en el bridge. No afecta al unlock (que es en claro). Pendiente solo confirmar en hardware.
 
 ## Convenciones
 
