@@ -124,29 +124,26 @@ public sealed class ZwiftClickBridge : IDisposable
         }
         Report(BridgePhase.Connecting, "Mando encontrado. Abriendo el canal seguro…");
 
-        var service = await _ble.GetServiceAsync(BleDeviceManager.ZWIFT_SERVICE_UUID,
-            onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
-        if (service == null)
+        // Emparejar si hace falta: en Windows, el servicio propietario de 128 bits del Click V2
+        // a menudo NO se enumera hasta que el dispositivo está emparejado (bonded).
+        await _ble.EnsurePairedAsync(onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
+
+        // Resolver CH02/CH03/CH04 por UUID en TODOS los servicios (estén donde estén).
+        var zap = await _ble.FindZapCharacteristicsAsync(onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
+        if (zap == null)
         {
-            Console.WriteLine("❌ Servicio ZAP (00000001-19CA-…) no encontrado (ni primario ni anidado).");
+            Console.WriteLine("❌ Características ZAP (CH02/CH03) no encontradas.");
             Report(BridgePhase.Failed,
-                "El mando se conectó pero no pude localizar su canal de control. Busqué tanto en los " +
-                "servicios principales como anidados. Revisa el registro: ahí aparece qué expone tu mando. " +
-                "Si no aparece, prueba a apagar y encender el Bluetooth de Windows y reintenta.", true);
+                "El mando se conectó pero no pude localizar su canal de control (CH02/CH03). En el registro " +
+                "verás qué servicios y características expone. Suele resolverse emparejándolo a mano en " +
+                "Configuración → Bluetooth (Just Works, sin PIN) y reintentando; o apagando y encendiendo el " +
+                "Bluetooth de Windows.", true);
             return false;
         }
 
-        var chars = (await service.GetCharacteristicsAsync(Windows.Devices.Bluetooth.BluetoothCacheMode.Uncached)).Characteristics;
-        var ch02 = chars.FirstOrDefault(c => c.Uuid == BleDeviceManager.CH02_UUID);
-        var ch03 = chars.FirstOrDefault(c => c.Uuid == BleDeviceManager.CH03_UUID);
-        var ch04 = chars.FirstOrDefault(c => c.Uuid == BleDeviceManager.CH04_UUID);
-
-        if (ch02 == null || ch03 == null)
-        {
-            Console.WriteLine("❌ CH02/CH03 no encontrados (enlazar por UUID; los handles no son estables).");
-            Report(BridgePhase.Failed, "No encontré los canales del mando. Reinícialo e inténtalo de nuevo.", true);
-            return false;
-        }
+        var ch02 = zap.Ch02;
+        var ch03 = zap.Ch03;
+        var ch04 = zap.Ch04;
         _writer.RegisterCharacteristic(BleDeviceManager.CH03_UUID, ch03);
 
         // ── 2. Suscribir CH02 (reto en claro + sesión cifrada) y CH04 (eco/estado) ──
