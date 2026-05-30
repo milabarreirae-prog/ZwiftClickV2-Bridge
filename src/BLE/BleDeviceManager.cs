@@ -5,12 +5,14 @@ using Windows.Devices.Enumeration;
 
 namespace ZwiftClickV2.Bridge.BLE;
 
-/// <summary>Las tres características de control del servicio ZAP, ya resueltas.</summary>
+/// <summary>Las características de control del servicio ZAP, ya resueltas.</summary>
 public sealed class ZapCharacteristics
 {
     public required GattCharacteristic Ch02 { get; init; } // Async / Notify (stream del dispositivo)
     public required GattCharacteristic Ch03 { get; init; } // SyncRx / Write (comandos host→device)
     public GattCharacteristic? Ch04 { get; init; }         // SyncTx / Indicate (eco/estado)
+    /// <summary>TODAS las características descubiertas, por UUID (incluye CH100/101/102 si existen).</summary>
+    public required IReadOnlyDictionary<Guid, GattCharacteristic> All { get; init; }
 }
 
 /// <summary>
@@ -21,6 +23,9 @@ public class BleDeviceManager
 {
     private BluetoothLEDevice? _device;
     private GattSession? _session;
+
+    /// <summary>Se dispara cuando cambia el estado de conexión BLE (true = conectado).</summary>
+    public event Action<bool>? ConnectionChanged;
 
     // UUIDs Zwift — ENLAZAR SIEMPRE POR UUID, NUNCA POR HANDLE (los handles ATT no son estables).
     // El servicio ZAP propietario que expone CH02/03/04/100/101/102 es 00000001-19CA-…
@@ -93,6 +98,9 @@ public class BleDeviceManager
             return null;
         }
         Console.WriteLine($"   📡 Conectado: {_device.Name} (Paired: {_device.DeviceInformation.Pairing.IsPaired})");
+
+        _device.ConnectionStatusChanged += (d, _) =>
+            ConnectionChanged?.Invoke(d.ConnectionStatus == BluetoothConnectionStatus.Connected);
 
         // Mantener viva la conexión GATT (FromBluetoothAddressAsync no conecta solo).
         try
@@ -223,7 +231,11 @@ public class BleDeviceManager
             if (ch02 != null && ch03 != null)
             {
                 Console.WriteLine($"   ✅ Características ZAP resueltas (intento {attempt}): CH02+CH03{(ch04 != null ? "+CH04" : "")}.");
-                return new ZapCharacteristics { Ch02 = ch02, Ch03 = ch03, Ch04 = ch04 };
+                return new ZapCharacteristics
+                {
+                    Ch02 = ch02, Ch03 = ch03, Ch04 = ch04,
+                    All = new Dictionary<Guid, GattCharacteristic>(allChars)
+                };
             }
 
             string svcList = string.Join(", ", serviceUuids);

@@ -160,11 +160,40 @@ public sealed class ZwiftClickBridge : IDisposable
         var ch04 = zap.Ch04;
         _writer.RegisterCharacteristic(BleDeviceManager.CH03_UUID, ch03);
 
-        // ── 2. Suscribir CH02 (reto en claro + sesión cifrada) y CH04 (eco/estado) ──
-        await _listener.SubscribeAsync(BleDeviceManager.CH02_UUID, ch02, OnCh02Frame);
+        // Avisar si el mando se desconecta (clave: el enlace puede caerse tras el unlock).
+        _ble.ConnectionChanged += connected =>
+        {
+            if (!connected)
+                Report(BridgePhase.Failed, "⚠️ El mando se desconectó del Bluetooth. Acércalo al PC, mantenlo despierto y reconecta.", true);
+        };
+
+        // ── 2. Suscribir TODOS los canales del mando ────────────────────
+        // El stream de botones puede llegar por CH02 (notify) o por otra característica. Suscribimos
+        // CH02, CH04 y CH100/101/102 (si existen) y reportamos el estado de cada suscripción, para
+        // no quedarnos a ciegas. Cada trama que llegue se vuelca al registro con su canal de origen.
+        var sub02 = await _listener.SubscribeAsync(BleDeviceManager.CH02_UUID, ch02, OnCh02Frame);
+        Report(BridgePhase.Connecting, $"Suscripción CH02 (botones): {sub02} · props {BleNotificationListener.DescribeProps(ch02)}");
+
         if (ch04 != null)
         {
-            await _listener.SubscribeAsync(BleDeviceManager.CH04_UUID, ch04, OnCh04Frame, useIndicate: true);
+            var sub04 = await _listener.SubscribeAsync(BleDeviceManager.CH04_UUID, ch04,
+                d => OnOtherChannelFrame("CH04", d), useIndicate: true);
+            Report(BridgePhase.Connecting, $"Suscripción CH04 (estado): {sub04} · props {BleNotificationListener.DescribeProps(ch04)}");
+        }
+
+        // CH100/101/102: por si los botones del Click V2 viajaran por aquí (todos tienen Notify).
+        foreach (var (uuid, label) in new[]
+        {
+            (BleDeviceManager.CH100_UUID, "CH100"),
+            (BleDeviceManager.CH101_UUID, "CH101"),
+            (BleDeviceManager.CH102_UUID, "CH102"),
+        })
+        {
+            if (zap.All.TryGetValue(uuid, out var extra))
+            {
+                var st = await _listener.SubscribeAsync(uuid, extra, d => OnOtherChannelFrame(label, d));
+                Report(BridgePhase.Connecting, $"Suscripción {label}: {st} · props {BleNotificationListener.DescribeProps(extra)}");
+            }
         }
 
         // ── 3. Handshake "RideOn 02 03" + pubkey[64] ────────────────────
@@ -254,44 +283,116 @@ public sealed class ZwiftClickBridge : IDisposable
             return;
         }
 
-        // Tras el unlock: tráfico cifrado. Hasta resolver la cripto, acumular y probar el bake-off.
+        // ── Tras el unlock ────────────────────────────────────────────────
+        // SIEMPRE volcamos la trama cruda al registro (modo aprendizaje): es la única forma de mapear
+        // el formato real de los botones del Click V2, que NADIE ha capturado todavía en hardware.
+        _postUnlockFrameCount++;
+        string hex = Convert.ToHexString(data);
+        _logger.Log("post_unlock_rx", "rx", "CH02", data, "raw");
+
+        // (1) ¿Es texto claro con un opcode ZAP conocido? (el reto llega en claro; los botones podrían).
+        if (data.Length >= 1 && IsKnownPlaintextOpcode(data[0]))
+        {
+            DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [CH02] CLARO {DescribeOpcode(data[0])} · {hex}");
+            ProcessAppPayload(data);
+            return;
+        }
+
+        // (2) Si no, lo tratamos como cifrado. Resolver la cripto por bake-off con las primeras tramas.
         if (_session == null)
         {
-            if (_candidates == null) return;
-            _postUnlockBuffer.Add(data);
-            _session = SessionKeyBakeoff.Resolve(_candidates, _postUnlockBuffer, out _);
-            if (_session == null) return; // seguir acumulando hasta que una trama valide su tag
+            if (_candidates != null)
+            {
+                _postUnlockBuffer.Add(data);
+                _session = SessionKeyBakeoff.Resolve(_candidates, _postUnlockBuffer, out _);
+            }
+
+            if (_session == null)
+            {
+                DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [CH02] cifrada? (sin resolver aún, {data.Length}B) · {hex}");
+                return;
+            }
 
             Console.WriteLine($"   🔓 Cripto de sesión resuelta por bake-off: [{_session.Label}]");
             _logger.LogInfo($"Session crypto resolved: {_session.Label}");
-            Report(BridgePhase.SessionResolved, "Canal cifrado resuelto: los botones del mando ya se leen correctamente.");
+            Report(BridgePhase.SessionResolved, $"Canal cifrado resuelto ({_session.Label}). Leyendo botones…");
             foreach (byte[] buffered in _postUnlockBuffer)
-                EmitButton(buffered);
+                DecryptAndProcess(buffered);
             _postUnlockBuffer.Clear();
             return;
         }
 
-        EmitButton(data);
+        DecryptAndProcess(data);
     }
 
-    /// <summary>Descifra una trama CH02 con el candidato resuelto y, si es un evento de botón, emula la tecla.</summary>
-    private void EmitButton(byte[] frame)
+    /// <summary>
+    /// Cualquier trama de un canal que NO sea CH02 (CH04, CH100/101/102). Antes del unlock solo se
+    /// registra (eco del handshake). Después del unlock se vuelca al registro: el stream de botones
+    /// podría llegar por aquí en vez de por CH02.
+    /// </summary>
+    private void OnOtherChannelFrame(string channel, byte[] data)
+    {
+        _logger.Log("other_rx", "rx", channel, data, _unlocked ? "post-unlock" : "pre-unlock");
+        if (!_unlocked)
+            return;
+
+        _postUnlockFrameCount++;
+        string hex = Convert.ToHexString(data);
+        string op = data.Length >= 1 ? DescribeOpcode(data[0]) : "vacío";
+        DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [{channel}] {op} · {hex}");
+    }
+
+    private void DecryptAndProcess(byte[] frame)
     {
         if (_session == null || !_session.TryDecrypt(frame, out byte[] plaintext) || plaintext.Length == 0)
+        {
+            DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [CH02] no descifrable · {Convert.ToHexString(frame)}");
             return;
+        }
+        DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [CH02] DESCIFRADA {DescribeOpcode(plaintext[0])} · {Convert.ToHexString(plaintext)}");
+        ProcessAppPayload(plaintext);
+    }
 
+    private static bool IsKnownPlaintextOpcode(byte op) => op is
+        ZapWireOpcode.ZwiftClickNotification or   // 0x38 — botones del Click V2
+        ZapWireOpcode.ZwiftPlayDeviceStatus or    // 0x37 — formato de botón estilo V1/Play
+        ZapWireOpcode.BatteryStatus or            // 0x23
+        ZapWireOpcode.Reset or                    // 0x19
+        ZapWireOpcode.ControllerRequest or        // 0x15
+        ZapWireOpcode.ControllerNotification;     // 0x28
+
+    private static string DescribeOpcode(byte op) => op switch
+    {
+        ZapWireOpcode.ZwiftClickNotification => "botón(0x38)",
+        ZapWireOpcode.ZwiftPlayDeviceStatus => "estado/botón(0x37)",
+        ZapWireOpcode.BatteryStatus => "batería(0x23)",
+        ZapWireOpcode.Reset => "reset(0x19)",
+        ZapWireOpcode.ControllerRequest => "ctrl-req(0x15)",
+        ZapWireOpcode.ControllerNotification => "ctrl-notif(0x28)",
+        _ => $"opcode 0x{op:X2}"
+    };
+
+    /// <summary>
+    /// Procesa un payload de aplicación ya en claro. Si es notificación de botón (0x38 o 0x37),
+    /// intenta inferir el lado y emula la tecla. El formato exacto NO está confirmado en hardware:
+    /// la heurística es provisional y el modo aprendizaje expone el hex para fijarlo con datos reales.
+    /// </summary>
+    private void ProcessAppPayload(byte[] plaintext)
+    {
         _logger.Log("app_rx", "rx", "CH02", plaintext, $"opcode=0x{plaintext[0]:X2}");
-        if (plaintext[0] != ZapWireOpcode.ZwiftClickNotification)
+
+        byte op = plaintext[0];
+        if (op != ZapWireOpcode.ZwiftClickNotification && op != ZapWireOpcode.ZwiftPlayDeviceStatus)
+            return; // batería/otros: no es un botón
+
+        int? side = InferSide(plaintext);
+        if (side == null)
+        {
+            DiagnosticFrame?.Invoke($"   ↳ botón sin lado claro · {Convert.ToHexString(plaintext)}");
             return;
+        }
 
-        var evt = ZopPeripheralEvent.Parse(plaintext.AsSpan(1).ToArray());
-
-        // Lado del botón → tecla configurada (por defecto cambio de marcha: − = K, + = I).
-        bool isMinus = evt.Type is ZopPeripheralEvent.EventType.LeftClick or ZopPeripheralEvent.EventType.LeftHold;
-        bool isPlus = evt.Type is ZopPeripheralEvent.EventType.RightClick or ZopPeripheralEvent.EventType.RightHold;
-        if (!isMinus && !isPlus)
-            return;
-
+        bool isPlus = side == 1;
         byte vk = isPlus ? _keyPlus : _keyMinus;
         string label = isPlus ? "+ (subir)" : "− (bajar)";
 
@@ -307,11 +408,25 @@ public sealed class ZwiftClickBridge : IDisposable
         }
     }
 
-    private void OnCh04Frame(byte[] data)
+    /// <summary>
+    /// Heurística provisional de lado pulsado (1 = +, 0 = −, null = desconocido). Cubre el formato
+    /// V1/qdomyos (<c>op XX 00 ZZ WW</c> → byte[2]==0 un botón, byte[4]==0 el otro, longitud 5) y, si
+    /// no, el primer byte 0x00 tras el opcode. Se reemplazará por el mapeo exacto con hex real.
+    /// </summary>
+    private static int? InferSide(byte[] p)
     {
-        // Eco/estado del handshake. Puede ser "RideOn 02 03 58 02 …" — el 58 02 NO es fatal:
-        // el reto llega igual por CH02. Solo se registra para diagnóstico.
-        _logger.Log("handshake_rx", "rx", "CH04", data, "device reply (58 02 status no es fatal)");
+        // Formato estilo V1/qz: "op b1 b2 b3 b4" (len 5). byte[2]==0 → un botón, byte[4]==0 → el otro.
+        if (p.Length == 5)
+        {
+            if (p[2] == 0x00) return 1; // +
+            if (p[4] == 0x00) return 0; // −
+            return null;                // release / sin botón
+        }
+        // Genérico: primer byte 0x00 tras el opcode; posición impar → +, par → −.
+        for (int i = 1; i < p.Length; i++)
+            if (p[i] == 0x00)
+                return (i % 2 == 1) ? 1 : 0;
+        return null;
     }
 
     private void SetupSessionBakeoff(byte[] deviceCompressedPubKey33)

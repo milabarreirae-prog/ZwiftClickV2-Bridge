@@ -27,18 +27,18 @@ public class BleNotificationListener
     /// <param name="characteristic">Objeto GATT.</param>
     /// <param name="handler">Callback que recibe los datos crudos.</param>
     /// <param name="useIndicate">true = Indicate, false = Notify.</param>
-    public async Task SubscribeAsync(Guid uuid, GattCharacteristic characteristic,
+    public async Task<GattCommunicationStatus> SubscribeAsync(Guid uuid, GattCharacteristic characteristic,
         Action<byte[]> handler, bool useIndicate = false)
     {
         _handlers[uuid] = handler;
-        await SubscribeAsync(uuid, characteristic, context => handler(context.Data), useIndicate);
+        return await SubscribeAsync(uuid, characteristic, context => handler(context.Data), useIndicate);
     }
 
     /// <summary>
     /// Registra una característica para recibir notificaciones con metadatos
     /// (UUID, ATT handle y payload).
     /// </summary>
-    public async Task SubscribeAsync(Guid uuid, GattCharacteristic characteristic,
+    public async Task<GattCommunicationStatus> SubscribeAsync(Guid uuid, GattCharacteristic characteristic,
         Action<BleNotificationContext> handler, bool useIndicate = false)
     {
         _contextHandlers[uuid] = handler;
@@ -58,12 +58,30 @@ public class BleNotificationListener
             });
         };
 
-        var cccd = useIndicate
-            ? GattClientCharacteristicConfigurationDescriptorValue.Indicate
-            : GattClientCharacteristicConfigurationDescriptorValue.Notify;
+        // Elegir el modo según lo que la característica realmente soporte (no asumir).
+        var props = characteristic.CharacteristicProperties;
+        GattClientCharacteristicConfigurationDescriptorValue cccd;
+        if (useIndicate && props.HasFlag(GattCharacteristicProperties.Indicate))
+            cccd = GattClientCharacteristicConfigurationDescriptorValue.Indicate;
+        else if (props.HasFlag(GattCharacteristicProperties.Notify))
+            cccd = GattClientCharacteristicConfigurationDescriptorValue.Notify;
+        else if (props.HasFlag(GattCharacteristicProperties.Indicate))
+            cccd = GattClientCharacteristicConfigurationDescriptorValue.Indicate;
+        else
+            return GattCommunicationStatus.Unreachable; // no soporta notify/indicate
 
-        await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(cccd);
+        try
+        {
+            return await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(cccd);
+        }
+        catch
+        {
+            return GattCommunicationStatus.Unreachable;
+        }
     }
+
+    /// <summary>Propiedades GATT de la característica (Notify/Indicate/Write…), para diagnóstico.</summary>
+    public static string DescribeProps(GattCharacteristic c) => c.CharacteristicProperties.ToString();
 
     /// <summary>
     /// Cancela la suscripción de una característica.
