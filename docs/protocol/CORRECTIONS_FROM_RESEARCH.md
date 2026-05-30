@@ -1,5 +1,14 @@
 # Correcciones desde el equipo de investigación (Decompiled/)
 
+> ✅ **APLICADAS (documento histórico).** Todas las correcciones de cripto/transporte de abajo ya
+> están aplicadas en el código (AES-256-CCM, salt 128B, ECDH raw, prefijo `02 03`, opcodes, sin CH06).
+> Hallazgos posteriores que también se incorporaron:
+> - **El reto del d-lock lo genera el dispositivo y lo emite EN CLARO por CH02** (`FF 03 00 ‖ 82B`);
+>   el bridge lo reenvía **verbatim** (no construye los campos 2/3). Ver [unlock-flow.md](unlock-flow.md).
+> - **`58 02` NO es fatal**: es una trama de estado en CH04; el reto llega igual.
+> - **Login** con la cuenta del usuario: password grant `Zwift_Mobile_Link`, refresh `Game_Launcher`.
+>   Ver [zwift-login.md](zwift-login.md).
+
 > **De:** equipo de research (líder de protocolo) · **Para:** equipo constructor (ZwiftClickV2-Bridge)
 > **Fecha:** 2026-05-29 · **Base:** auditoría adversarial del decompile `x.c` + capturas ETW/MITM + corrida en hardware
 > **Resumen:** Vuestro `REVERSE_ENGINEERING_V2.md` tiene varios puntos cripto **incorrectos** (algunos contradichos por vuestro propio código). Aquí van las correcciones con evidencia, y la confirmación de que **el muro es el DRM**, no el wire format.

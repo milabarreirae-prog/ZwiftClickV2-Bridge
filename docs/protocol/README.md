@@ -6,7 +6,8 @@ Protocol (ZAP)** usado por el Zwift Click V2 (2025). Cada afirmación está grad
 | Documento | Contenido |
 |---|---|
 | [ZAP_STATE_OF_THE_ART.md](ZAP_STATE_OF_THE_ART.md) | Estado del arte graduado por evidencia (✅/🟡/❌/⚪). **Empieza aquí.** |
-| [unlock-flow.md](unlock-flow.md) | El flujo de unlock server-backed confirmado (handshake → POST d-lock → `FF 04 00`). |
+| [unlock-flow.md](unlock-flow.md) | El flujo de unlock server-backed **RESUELTO y validado** (reto en claro en CH02 → POST verbatim → `FF 04 00`). |
+| [zwift-login.md](zwift-login.md) | Login con la cuenta del usuario (grants password / refresh verificados). |
 | [opcode-catalog.md](opcode-catalog.md) | Catálogo autoritativo de opcodes de wire ZAP. |
 
 ## Resumen cripto/transporte (confirmado)
@@ -32,7 +33,10 @@ Protocol (ZAP)** usado por el Zwift Click V2 (2025). Cada afirmación está grad
 - Capturas crudas (`out/mitm/`, `phaseC-captures/`): contenían **tokens OAuth reales** y datos del
   dispositivo. Quedan fuera del repo; aquí solo vive el conocimiento de protocolo sanitizado.
 
-## Incógnita abierta
+## Estado del unlock
 
-El origen de los campos **2 (id)** y **3 (firma 40B)** del request `device/authenticate`. Ver
-[unlock-flow.md](unlock-flow.md). Es el único bloqueo para un unlock de extremo a extremo.
+**Resuelto.** El dispositivo genera el reto completo `{pubkey, id, firma}` y lo emite **en claro**
+por CH02 (`FF 03 00 ‖ 82B`); el bridge lo reenvía verbatim con el Bearer del usuario → `204` →
+`FF 04 00`. El antiguo "gran desconocido" (origen de los campos 2 y 3) queda cerrado: los genera el
+dispositivo. Lo único pendiente es la cripto de sesión post-unlock (decodificar botones). Ver
+[unlock-flow.md](unlock-flow.md).

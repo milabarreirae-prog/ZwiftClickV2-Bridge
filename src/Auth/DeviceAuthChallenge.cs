@@ -1,91 +1,80 @@
-using ZwiftClickV2.Bridge.Crypto;
-
 namespace ZwiftClickV2.Bridge.Auth;
 
 /// <summary>
-/// Cuerpo del request <c>POST /api/d-lock-service/device/authenticate</c>, decodificado
-/// de la captura MITM (ver docs/protocol/phaseC-dlock-auth.md):
+/// Reto de autenticación que **genera el propio Zwift Click V2** y emite en CLARO por CH02,
+/// envuelto en un header ZAP de 3 bytes <c>FF 03 00</c> (trama de ~85B). El cuerpo es el protobuf
+/// de 82B que se reenvía **VERBATIM** a <c>/api/d-lock-service/device/authenticate</c>:
 ///
 /// <code>
 /// protobuf {
-///   1: bytes  devicePubKeyCompressed (33B = 0x02/0x03 ‖ X)   ← del handshake BLE (campo 1)
-///   2: varint id                                              ← lo genera el DISPOSITIVO
-///   3: bytes  signature (40B)                                 ← lo genera el DISPOSITIVO
+///   1: bytes  devicePubKeyCompressed (33B = 0x02/0x03 ‖ X)   ← pubkey EFÍMERA del device, por sesión
+///   2: varint id                                              ← identificador ESTÁTICO del device
+///   3: bytes  signature (40B)                                 ← firma fresca por sesión
 /// }
 /// </code>
 ///
-/// ⚠️ DESCONOCIDO QUE BLOQUEA EL UNLOCK COMPLETO: el origen exacto de los campos 2 (id) y
-/// 3 (firma 40B). El campo 1 sale del handshake; los campos 2 y 3 los emite el dispositivo y
-/// la app oficial los lee por BLE (¿handshake? ¿CH100/101/102?). Hasta resolverlo no se puede
-/// generar un request válido. Resolver vía decompile de la ruta de auth (FUN_14050d1d0
-/// "Received auth challenge") y/o recaptura BLE+HTTP correlacionada.
+/// RESUELTO (ver docs/protocol/unlock-flow.md): los tres campos los produce el dispositivo. El
+/// bridge NO construye ni firma nada — solo localiza el blob, le quita el header y reenvía los 82B.
 /// </summary>
 public sealed class DeviceAuthChallenge
 {
-    /// <summary>Clave pública del dispositivo, comprimida a 33B (campo 1).</summary>
+    /// <summary>El cuerpo protobuf de 82B, listo para POSTear verbatim.</summary>
+    public required byte[] Body { get; init; }
+
+    /// <summary>Campo 1: clave pública efímera del dispositivo, comprimida (33B).</summary>
     public required byte[] DevicePublicKeyCompressed { get; init; }
 
-    /// <summary>Identificador del dispositivo (campo 2). Origen no resuelto.</summary>
+    /// <summary>Campo 2: identificador estático del dispositivo.</summary>
     public required ulong DeviceId { get; init; }
 
-    /// <summary>Firma/prueba de challenge de 40B (campo 3). Origen no resuelto.</summary>
+    /// <summary>Campo 3: firma/prueba de challenge (40B).</summary>
     public required byte[] Signature { get; init; }
 
     /// <summary>
-    /// Construye un challenge a partir de la pubkey cruda de 64B del dispositivo (del handshake)
-    /// más el id y la firma que el dispositivo debe haber provisto por BLE.
+    /// Si <paramref name="frame"/> contiene el protobuf del reto
+    /// (<c>… 0A 21 02/03 &lt;pubkey&gt; 10 &lt;id&gt; 1A &lt;len&gt; &lt;sig&gt;</c>, p.ej. una
+    /// notificación CH02 de 85B con header <c>FF 03 00</c>), lo parsea y devuelve true. Tolera
+    /// cualquier prefijo: busca el comienzo del protobuf (tag <c>0A 21</c>) dentro del frame.
     /// </summary>
-    public static DeviceAuthChallenge FromDevicePublicKey(byte[] devicePublicKey64, ulong deviceId, byte[] signature40)
+    public static bool TryParse(byte[] frame, out DeviceAuthChallenge? challenge)
     {
-        if (signature40 == null || signature40.Length != 40)
-            throw new ArgumentException("La firma del dispositivo debe ser de 40 bytes", nameof(signature40));
-
-        return new DeviceAuthChallenge
+        challenge = null;
+        for (int i = 0; i + 35 <= frame.Length; i++)
         {
-            DevicePublicKeyCompressed = EcPoint.Compress(devicePublicKey64),
-            DeviceId = deviceId,
-            Signature = signature40
-        };
-    }
+            if (frame[i] != 0x0A || frame[i + 1] != 0x21) continue;               // campo 1: bytes, len 33
+            if (frame[i + 2] != 0x02 && frame[i + 2] != 0x03) continue;            // prefijo punto comprimido
+            byte[] pub = frame[(i + 2)..(i + 2 + 33)];
+            int p = i + 2 + 33;
 
-    /// <summary>
-    /// Serializa el cuerpo protobuf del request <c>device/authenticate</c>.
-    /// Campo 1 = len-delimited (tag 0x0A), campo 2 = varint (tag 0x10), campo 3 = len-delimited (tag 0x1A).
-    /// </summary>
-    public byte[] ToProtobuf()
-    {
-        if (DevicePublicKeyCompressed.Length != 33)
-            throw new InvalidOperationException("La pubkey comprimida debe ser de 33 bytes");
-        if (Signature.Length != 40)
-            throw new InvalidOperationException("La firma debe ser de 40 bytes");
+            if (p >= frame.Length || frame[p] != 0x10) continue;                   // campo 2: varint
+            p++;
+            ulong id = 0; int shift = 0; bool ok = false;
+            while (p < frame.Length && shift < 64)
+            {
+                byte b = frame[p++];
+                id |= (ulong)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) { ok = true; break; }
+                shift += 7;
+            }
+            if (!ok) continue;
 
-        using var ms = new MemoryStream();
+            if (p >= frame.Length || frame[p] != 0x1A) continue;                   // campo 3: bytes
+            p++;
+            if (p >= frame.Length) continue;
+            int sigLen = frame[p++];
+            if (p + sigLen > frame.Length) continue;
+            byte[] sig = frame[p..(p + sigLen)];
+            int end = p + sigLen;
 
-        // Campo 1: bytes (wire type 2)
-        ms.WriteByte(0x0A);
-        WriteVarint(ms, (ulong)DevicePublicKeyCompressed.Length);
-        ms.Write(DevicePublicKeyCompressed, 0, DevicePublicKeyCompressed.Length);
-
-        // Campo 2: varint (wire type 0)
-        ms.WriteByte(0x10);
-        WriteVarint(ms, DeviceId);
-
-        // Campo 3: bytes (wire type 2)
-        ms.WriteByte(0x1A);
-        WriteVarint(ms, (ulong)Signature.Length);
-        ms.Write(Signature, 0, Signature.Length);
-
-        return ms.ToArray();
-    }
-
-    private static void WriteVarint(Stream stream, ulong value)
-    {
-        do
-        {
-            byte b = (byte)(value & 0x7F);
-            value >>= 7;
-            if (value != 0) b |= 0x80;
-            stream.WriteByte(b);
-        } while (value != 0);
+            challenge = new DeviceAuthChallenge
+            {
+                Body = frame[i..end],   // protobuf contiguo (82B) — se reenvía verbatim
+                DevicePublicKeyCompressed = pub,
+                DeviceId = id,
+                Signature = sig
+            };
+            return true;
+        }
+        return false;
     }
 }

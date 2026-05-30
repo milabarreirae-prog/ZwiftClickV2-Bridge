@@ -1,9 +1,8 @@
 # Ingeniería inversa — Zwift Click V2 (ZAP)
 
-> **Estado: RESUELTO en lo esencial.** El mecanismo de bloqueo y la cadena de unlock están
-> confirmados por captura BLE+HTTP correlacionada sobre la app oficial. Este documento es el
-> resumen; la referencia de protocolo graduada por evidencia vive en
-> [`docs/protocol/`](protocol/README.md).
+> **Estado: RESUELTO y VALIDADO EN HARDWARE.** La cadena de unlock completa se reprodujo sin la app
+> oficial (2026-05-30). Este documento es el resumen; la referencia de protocolo graduada por
+> evidencia vive en [`docs/protocol/`](protocol/README.md).
 
 ## TL;DR
 
@@ -12,14 +11,18 @@ oficial valida la cuenta/dispositivo contra el servidor de Zwift (con el `access
 del usuario) y solo entonces confirma el unlock por BLE. La cadena completa:
 
 ```
-1. BLE   handshake  "RideOn 02 03" + localPubKey[64]      (write CH03 ↔ indicate CH04)
-2. HTTP  POST /api/d-lock-service/device/authenticate      Authorization: Bearer <access_token>
-         body protobuf { 1: devicePubKey_comprimida(33B), 2: id, 3: firma(40B) }   → 204 No Content
-3. BLE   write "FF 04 00" → CH03                           (11 ms después del 204)
-4.       sesión cifrada AES-256-CCM fluye en CH02
+1. BLE   handshake  "RideOn 02 03" + localPubKey[64]      (write CH03; el 58 02 en CH04 NO es fatal)
+2. BLE   el DISPOSITIVO emite EN CLARO en CH02: FF 03 00 ‖ protobuf(82B)
+         { 1: devicePubKey_comprimida(33B), 2: id, 3: firma(40B) }   ← lo genera el device
+3. HTTP  POST /api/d-lock-service/device/authenticate      Authorization: Bearer <access_token>
+         body = esos 82B VERBATIM (sin Content-Type)                 → 204 No Content
+4. BLE   write "FF 04 00" → CH03                           (señal de unlock, solo tras el 204)
+5.       sesión cifrada AES-256-CCM fluye en CH02
 ```
 
-Detalle y evidencia: [`docs/protocol/unlock-flow.md`](protocol/unlock-flow.md).
+**Clave:** el bridge **no construye ni firma** los campos del reto — el dispositivo entrega el
+protobuf completo en claro por CH02 y se reenvía verbatim. La cripto solo hace falta para los
+botones/telemetría post-unlock. Detalle y evidencia: [`docs/protocol/unlock-flow.md`](protocol/unlock-flow.md).
 
 ## Correcciones respecto a versiones previas de este documento
 
@@ -74,10 +77,18 @@ Tabla completa en [`docs/protocol/opcode-catalog.md`](protocol/opcode-catalog.md
 `0x15` CONTROLLER_REQUEST, `0x19` RESET, `0x23` BATTERY_STATUS, `0x37` ZWIFT_PLAY_DEVICE_STATUS,
 `0x38` ZWIFT_CLICK_NOTIFICATION, `0xFF` LOST_CONTROL. No existe opcode keep-alive/ping en ZAP.
 
-## Lo único que falta para un unlock de extremo a extremo
+## Login con la cuenta del usuario (diseño ético)
 
-El **origen de los campos 2 (id) y 3 (firma 40B)** del request `device/authenticate`. El campo 1
-(pubkey) sale del handshake; los campos 2 y 3 los emite el dispositivo por BLE y su ruta exacta no
-está resuelta. El código deja el punto de ensamblado listo
-([`ZwiftClickBridge.TryAssembleChallenge`](../src/Bridge/ZwiftClickBridge.cs)) y no fabrica un
-request inválido mientras tanto. Ver [`docs/protocol/unlock-flow.md`](protocol/unlock-flow.md).
+El `access_token` se obtiene con **la cuenta Zwift del propio usuario** (ver
+[`docs/protocol/zwift-login.md`](protocol/zwift-login.md)) — nunca un token embebido:
+- **password grant** con `client_id=Zwift_Mobile_Link` (tiene Direct Access Grants), o
+- **refresh_token grant** con `client_id=Game_Launcher` (sin contraseña; útil con 2FA).
+
+Variables de entorno soportadas: `ZWIFT_ACCESS_TOKEN`, `ZWIFT_USERNAME`+`ZWIFT_PASSWORD`,
+`ZWIFT_REFRESH_TOKEN`. Implementación: [`src/Auth/ZwiftOAuthClient.cs`](../src/Auth/ZwiftOAuthClient.cs).
+
+## Pendiente (solo post-unlock)
+
+El unlock ya es completo. Lo único restante es decodificar el tráfico cifrado de CH02 tras el
+unlock (botones/telemetría): derivar la clave de sesión con ECDH (priv local + campo 1 del reto
+descomprimido) y zanjar el `HkdfInfoMode` con el reto en claro como oráculo. No afecta al unlock.

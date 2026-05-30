@@ -17,18 +17,18 @@ ECDH, unlock server-backed con **tu propia cuenta Zwift**, y sesión cifrada AES
 |---|---|
 | Conexión BLE (scan por advertising, enlace por UUID) | ✅ |
 | Handshake ZAP V2 (`RideOn 02 03`) | ✅ |
-| Criptografía (ECDH P-256 raw → HKDF 128B → AES-256-CCM) | ✅ (self-test pasa) |
-| Login OAuth con la cuenta del usuario + POST d-lock | ✅ implementado |
-| Emulación de teclado (`SendInput`) | ✅ |
-| **Unlock de extremo a extremo** | 🔬 **bloqueado por 1 incógnita** (ver abajo) |
+| Captura del reto + POST d-lock + `FF 04 00` | ✅ |
+| Login con la cuenta del usuario (password / refresh) | ✅ |
+| **Unlock de extremo a extremo (sin la app oficial)** | ✅ **validado en hardware** |
+| Criptografía de sesión (ECDH raw → HKDF 128B → AES-256-CCM) | ✅ self-test; ⚠️ `HkdfInfoMode` por confirmar contra device |
+| Decodificación de botones post-unlock | 🔬 depende de zanjar `HkdfInfoMode` |
 
-### La incógnita que falta
+### Cómo funciona el unlock (resuelto)
 
-El request de unlock (`POST /api/d-lock-service/device/authenticate`) lleva un protobuf con tres
-campos: `{1: pubkey del dispositivo, 2: id, 3: firma de 40B}`. El campo 1 sale del handshake BLE;
-**el origen exacto de los campos 2 y 3 (que emite el propio dispositivo por BLE) todavía no está
-resuelto.** Hasta cerrarlo, el bridge llega hasta el handshake e informa con precisión dónde queda
-bloqueado, sin fabricar un request inválido. Detalle en
+El **dispositivo genera el reto y lo emite en claro por CH02** (`FF 03 00 ‖ protobuf 82B`). El bridge
+**no construye ni firma nada**: captura el blob, le quita el header y **reenvía los 82 bytes verbatim**
+a `POST /api/d-lock-service/device/authenticate` con el `Bearer` de **tu** cuenta → `204` → escribe
+`FF 04 00`. La cripto solo hace falta para decodificar botones después del unlock. Detalle en
 [`docs/protocol/unlock-flow.md`](docs/protocol/unlock-flow.md).
 
 ## 🚀 Uso
@@ -60,15 +60,21 @@ dotnet run --project src -- --diagnose
 dotnet run --project src -- --bridge
 ```
 
-Las credenciales de **tu** cuenta Zwift se leen de variables de entorno (o se piden de forma
-interactiva) y solo se usan en memoria para obtener un `access_token` — **nunca se embeben ni se
-guardan**:
+El token de **tu** cuenta Zwift se resuelve de variables de entorno (o, si faltan, se piden las
+credenciales de forma interactiva) y solo se usa en memoria — **nunca se embebe ni se guarda**:
 
 ```bash
-$env:ZWIFT_USERNAME = "tu-email@example.com"
-$env:ZWIFT_PASSWORD = "tu-contraseña"
+# Opción A: usuario + contraseña (password grant, client_id Zwift_Mobile_Link)
+$env:ZWIFT_USERNAME = "tu-email@example.com"; $env:ZWIFT_PASSWORD = "tu-contraseña"
+# Opción B: refresh_token (sin contraseña; útil con 2FA, client_id Game_Launcher)
+$env:ZWIFT_REFRESH_TOKEN = "<tu refresh_token>"
+# Opción C: un access_token ya en mano
+$env:ZWIFT_ACCESS_TOKEN = "<tu access_token>"
+
 dotnet run --project src -- --bridge
 ```
+
+Despierta el Click pulsando un botón cuando aparezca el escaneo. Login: ver [docs/protocol/zwift-login.md](docs/protocol/zwift-login.md).
 
 Flags: `--no-keyboard` (no emular teclas), `--legacy-hkdf-info` (probar `info="handshake data"`).
 

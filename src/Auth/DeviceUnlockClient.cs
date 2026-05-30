@@ -10,12 +10,12 @@ public sealed record DeviceUnlockResult(bool Authorized, int HttpStatusCode, str
 
 /// <summary>
 /// Cliente del servicio de DRM de Zwift (<c>d-lock-service</c>). El unlock del Click V2 es
-/// SERVER-BACKED: requiere el <c>access_token</c> de la cuenta del usuario y una validación del
-/// servidor. El servidor responde <c>204 No Content</c> (no devuelve un ticket reinyectable):
-/// es validación "¿esta cuenta puede usar este dispositivo?". Tras el 204, el unlock BLE se
-/// completa escribiendo <c>FF 04 00</c> en CH03.
+/// SERVER-BACKED: requiere el <c>access_token</c> de la cuenta del usuario. El cuerpo es el blob de
+/// 82B que **genera el dispositivo** (campos 1/2/3), reenviado **VERBATIM** — el bridge no construye
+/// ni firma nada. El servidor responde <c>204 No Content</c>: validación "¿esta cuenta puede usar
+/// este dispositivo?". Tras el 204, el unlock BLE se completa escribiendo <c>FF 04 00</c> en CH03.
 ///
-/// Flujo confirmado — ver docs/protocol/phaseC-dlock-auth.md.
+/// Flujo confirmado — ver docs/protocol/unlock-flow.md.
 /// </summary>
 public sealed class DeviceUnlockClient : IDisposable
 {
@@ -26,33 +26,31 @@ public sealed class DeviceUnlockClient : IDisposable
 
     public DeviceUnlockClient(HttpClient? http = null)
     {
-        _http = http ?? new HttpClient();
+        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
     }
 
     /// <summary>
-    /// POST del challenge del dispositivo con <c>Authorization: Bearer &lt;accessToken&gt;</c>.
-    /// Devuelve autorizado = true sólo ante un <c>204 No Content</c>.
+    /// POST del cuerpo del reto (82B, verbatim) con <c>Authorization: Bearer &lt;accessToken&gt;</c>
+    /// y **sin Content-Type** (igual que la app oficial). Autorizado = <c>204 No Content</c>.
     /// </summary>
     public async Task<DeviceUnlockResult> AuthenticateAsync(
         string accessToken,
-        DeviceAuthChallenge challenge,
+        byte[] challengeBody,
         CancellationToken cancellationToken = default)
     {
-        byte[] body = challenge.ToProtobuf();
+        using var content = new ByteArrayContent(challengeBody);
+        content.Headers.ContentType = null; // la app oficial no fija Content-Type
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, AuthenticateEndpoint)
-        {
-            Content = new ByteArrayContent(body)
-        };
+        using var request = new HttpRequestMessage(HttpMethod.Post, AuthenticateEndpoint) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         using var response = await _http.SendAsync(request, cancellationToken);
         int status = (int)response.StatusCode;
 
-        bool authorized = response.StatusCode == HttpStatusCode.NoContent; // 204
+        bool authorized = response.StatusCode == HttpStatusCode.NoContent || response.IsSuccessStatusCode;
         string notes = authorized
-            ? "Servidor autorizó el dispositivo (204). Procede el unlock BLE (FF 04 00)."
-            : $"El servidor no autorizó (HTTP {status}). El dispositivo seguirá bloqueado.";
+            ? $"Servidor autorizó el dispositivo (HTTP {status}). Procede el unlock BLE (FF 04 00)."
+            : $"El servidor no autorizó (HTTP {status}). Token inválido/expirado o la cuenta no posee este dispositivo.";
 
         return new DeviceUnlockResult(authorized, status, notes);
     }

@@ -36,16 +36,22 @@ dotnet run --project src -- --bridge           # unlock + teclado (requiere devi
 - 36B → key[0:32] + ivBase[32:36]. AES-256-CCM, tag 4B, AAD vacío.
 - Nonce `ivBase[4] ‖ counter[4]` (counter LE). Wire `[counter:4B LE][ct][tag:4B]`.
 
-## Flujo de unlock (confirmado)
+## Flujo de unlock (RESUELTO y validado en hardware)
 
-`handshake "RideOn 02 03"` → `POST d-lock-service/device/authenticate` (Bearer del token del
-usuario) → `204` → write `FF 04 00` en CH03 → sesión cifrada en CH02. Detalle en
-[docs/protocol/unlock-flow.md](docs/protocol/unlock-flow.md).
+`handshake "RideOn 02 03"` → el **dispositivo emite el reto en claro en CH02** (`FF 03 00 ‖ 82B`
+protobuf `{pubkey, id, firma}`) → `POST d-lock-service/device/authenticate` con los 82B **verbatim**
++ Bearer del usuario (sin Content-Type) → `204` → write `FF 04 00` en CH03 → sesión cifrada en CH02.
+El `58 02` en CH04 NO es fatal. Detalle en [docs/protocol/unlock-flow.md](docs/protocol/unlock-flow.md).
 
-### Bloqueo abierto
+Puntos clave de implementación: el bridge **no construye ni firma** los campos (los genera el device;
+`DeviceAuthChallenge.TryParse` los extrae). Login con la cuenta del usuario en `ZwiftOAuthClient`
+(`ResolveTokenFromEnvAsync`: ACCESS_TOKEN → USERNAME/PASSWORD → REFRESH_TOKEN). La pubkey del device
+para la sesión se obtiene con `EcPoint.Decompress` del campo 1 del reto.
 
-El origen de los **campos 2 (id) y 3 (firma 40B)** del request d-lock. Único punto a completar:
-`ZwiftClickBridge.TryAssembleChallenge`. No fabricar un request inválido mientras tanto.
+### Pendiente (solo post-unlock)
+
+Decodificar CH02 cifrado tras el unlock (botones): zanjar `HkdfInfoMode` (vacío vs `"handshake data"`)
+con el reto en claro como oráculo. No afecta al unlock.
 
 ## Convenciones
 

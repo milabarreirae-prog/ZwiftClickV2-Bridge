@@ -26,20 +26,21 @@ public static class Program
 
             case "--diagnose":
             case "-d":
-                return await RunBridgeAsync(GetDeviceNameArg(args), credentials: null, hkdfMode, emulateKeyboard: false);
+                return await RunBridgeAsync(GetDeviceNameArg(args), accessToken: null, hkdfMode, emulateKeyboard: false);
 
             case "--unlock":
             case "--bridge":
             case "-b":
             {
-                var credentials = ZwiftCredentials.Resolve();
-                if (credentials == null)
+                string? token = await ResolveAccessTokenAsync();
+                if (token == null)
                 {
-                    Console.WriteLine("❌ Faltan credenciales de tu cuenta Zwift.");
-                    Console.WriteLine("   Define ZWIFT_USERNAME y ZWIFT_PASSWORD, o ejecuta en una terminal interactiva.");
+                    Console.WriteLine("❌ No se pudo obtener un token de tu cuenta Zwift.");
+                    Console.WriteLine("   Define ZWIFT_ACCESS_TOKEN, o ZWIFT_USERNAME+ZWIFT_PASSWORD, o ZWIFT_REFRESH_TOKEN,");
+                    Console.WriteLine("   o ejecuta en una terminal interactiva para introducir tus credenciales.");
                     return 1;
                 }
-                return await RunBridgeAsync(GetDeviceNameArg(args), credentials, hkdfMode, emulateKeyboard: !noKeyboard);
+                return await RunBridgeAsync(GetDeviceNameArg(args), token, hkdfMode, emulateKeyboard: !noKeyboard);
             }
 
             case "--help":
@@ -55,10 +56,33 @@ public static class Program
         }
     }
 
-    private static async Task<int> RunBridgeAsync(string deviceName, ZwiftCredentials? credentials, HkdfInfoMode hkdfMode, bool emulateKeyboard)
+    /// <summary>
+    /// Resuelve un access_token de la cuenta DEL USUARIO: primero del entorno
+    /// (ZWIFT_ACCESS_TOKEN / ZWIFT_USERNAME+ZWIFT_PASSWORD / ZWIFT_REFRESH_TOKEN) y, si no hay nada
+    /// y la terminal es interactiva, pide usuario y contraseña. Nunca embebe ni guarda el token.
+    /// </summary>
+    private static async Task<string?> ResolveAccessTokenAsync()
+    {
+        using var oauth = new ZwiftOAuthClient();
+        try
+        {
+            string? token = await oauth.ResolveTokenFromEnvAsync();
+            if (token != null) return token;
+
+            var credentials = ZwiftCredentials.Resolve();
+            if (credentials != null) return await oauth.LoginAsync(credentials);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Login Zwift falló: {ex.Message}");
+        }
+        return null;
+    }
+
+    private static async Task<int> RunBridgeAsync(string deviceName, string? accessToken, HkdfInfoMode hkdfMode, bool emulateKeyboard)
     {
         using var bridge = new ZwiftClickBridge(hkdfMode, emulateKeyboard);
-        bool success = await bridge.StartAsync(deviceName, credentials);
+        bool success = await bridge.StartAsync(deviceName, accessToken);
 
         if (success)
         {

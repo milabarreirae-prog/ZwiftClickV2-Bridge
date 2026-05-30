@@ -1,75 +1,69 @@
-> **Procedencia:** hallazgo del equipo de investigación, capturado con MITM HTTPS + ETW BLE
-> correlacionados sobre la app oficial de Zwift y el propio Click V2 del investigador.
-> **Sanitizado para publicación:** los valores concretos del dispositivo (clave pública, id y
-> firma) y cualquier token OAuth han sido **redactados**. Las capturas crudas (`out/mitm/`,
-> `phaseC-captures/`) **NO** se incluyen en este repositorio.
+> **Procedencia:** hallazgo del equipo de investigación, **validado de extremo a extremo en
+> hardware** (Click V2, 2026-05-30) con MITM HTTPS + ETW BLE correlacionados.
+> **Sanitizado para publicación:** los valores concretos del dispositivo (clave pública, id y firma)
+> y cualquier token OAuth están **redactados**. Las capturas crudas (`out/mitm/`, `phaseC-captures/`)
+> **NO** se incluyen en este repositorio.
 
-# Flujo de unlock del Zwift Click V2 (server-backed) — CONFIRMADO
+# Flujo de unlock del Zwift Click V2 (server-backed) — RESUELTO ✅
 
-El bloqueo del Click V2 es **DRM con respaldo de servidor**. No hay unlock local: hace falta el
-`access_token` de una cuenta Zwift y una validación del servidor. La secuencia completa se capturó
-con correlación de milisegundos entre BLE (ETW) y HTTP (MITM):
+El bloqueo del Click V2 es **DRM con respaldo de servidor**, y la cadena completa ya se reprodujo
+**sin la app oficial**. No hay unlock local: hace falta el `access_token` de la cuenta Zwift del
+usuario y una validación del servidor. Lo central del hallazgo:
 
-```
-T+0.000  BLE  TX host→CH03:  52 69 64 65 4F 6E 02 03 …   "RideOn 02 03" + localPubKey[64]  (handshake)
-T+0.085  BLE  RX device→CH04: 52 69 64 65 4F 6E 02 03 …   "RideOn 02 03"  (respuesta limpia, SIN 5802)
-T+4.544  HTTP POST …/api/d-lock-service/device/authenticate   →  204 No Content
-T+4.555  BLE  TX host→CH03:  FF 04 00                        ← 11 ms DESPUÉS del 204
-T+4.5xx  BLE  RX device→CH02: telemetría/batería cifrada (sesión desbloqueada, AES-256-CCM)
-```
+> **El reto lo genera el propio dispositivo y lo emite EN CLARO por CH02.** No hay que construir ni
+> firmar nada: el bridge captura el blob, le quita el header de 3 bytes y **reenvía los 82 bytes
+> verbatim** al servidor con el Bearer del usuario.
 
-## La llamada de unlock
+## La secuencia (validada en vivo)
 
 ```
-POST https://us-or-rly101.zwift.com/api/d-lock-service/device/authenticate
-Authorization: Bearer <access_token de la cuenta Zwift del usuario>
-Body: 82 bytes, protobuf
-Respuesta: HTTP 204 No Content (cuerpo vacío)
+1. BLE   handshake  "RideOn 02 03" + localPubKey[64]  (72B) → CH03 (write-without-response)
+         (La indicación del device en CH04 puede ser "RideOn 02 03 58 02 00…" = trama de estado.
+          EL 58 02 NO ES FATAL: el reto llega igual por CH02.)
+2. BLE   El DISPOSITIVO emite en CH02 (notify) una trama PLAINTEXT de ~85B:
+            FF 03 00 | <protobuf 82B>
+         protobuf = { 1: pubkey_comprimida(33B, 02/03‖X), 2: id(varint), 3: firma(40B) }
+3. HTTP  POST https://us-or-rly101.zwift.com/api/d-lock-service/device/authenticate
+            Authorization: Bearer <access_token de la cuenta del usuario>   (sin Content-Type)
+            Body = esos 82 bytes VERBATIM (quitando el header FF 03 00)
+         → 204 No Content
+4. BLE   write "FF 04 00" → CH03   (señal de unlock; solo válida tras el 204)
+5. BLE   sesión cifrada AES-256-CCM fluye en CH02
 ```
 
-### Cuerpo del request (protobuf)
+## Anatomía del reto (campos)
 
-| Campo | Wire | Tamaño | Significado | Origen |
+| Campo | Wire | Tamaño | Significado | Naturaleza |
 |---|---|---|---|---|
-| 1 | bytes (tag 0x0A) | 33 B | **Clave pública EC del dispositivo, COMPRIMIDA** (`0x02/0x03 ‖ X`) | del handshake BLE |
-| 2 | varint (tag 0x10) | — | **Identificador del dispositivo** | lo genera el dispositivo |
-| 3 | bytes (tag 0x1A) | 40 B | **Firma / prueba de challenge** del dispositivo | lo genera el dispositivo |
+| 1 | bytes (tag `0A`, len `21`) | 33 B | pubkey EC del device, comprimida (`0x02/0x03 ‖ X`) | **efímera** por sesión |
+| 2 | varint (tag `10`) | — | identificador del dispositivo | **estático** (mismo en todas las sesiones) |
+| 3 | bytes (tag `1A`) | 40 B | firma / prueba de challenge | fresca por sesión |
 
-> Valores de ejemplo **redactados**: campo 1 = `03 <…X de 32B…>`, campo 2 = `<DEVICE_ID>`,
-> campo 3 = `<FIRMA de 40B>`.
+> Valores de ejemplo **redactados**: `1: 03 <…X de 32B…>`, `2: <DEVICE_ID>`, `3: <FIRMA de 40B>`.
+> El blob completo en CH02 es `FF 03 00` ‖ (esos 82B). El cuerpo del POST empieza en el offset 3.
 
-## Conclusiones
+## Conclusiones (confirmadas en hardware)
 
-1. **El DRM es server-backed (100% confirmado).** El unlock requiere un `access_token` válido de
-   una cuenta Zwift (Bearer) y un round-trip al servidor. Esto explica el `58 02` que ve un cliente
-   no autorizado.
-2. **El servidor responde `204 No Content`** — NO devuelve un ticket reinyectable. Es validación del
-   lado servidor: "¿esta cuenta puede usar este dispositivo?".
-3. **`FF 04 00` es el comando de unlock**, pero el dispositivo solo lo acepta **después del 204**.
-   Cierra la vieja hipótesis de "unlock local/haptic": `FF 04 00` es la confirmación BLE que la app
-   escribe una vez que el servidor autorizó la cuenta/dispositivo.
-4. Los `58 02` que se perseguían a nivel ATT eran en gran parte **artefactos de framing HCI**; un
-   cliente propio recibe un rechazo ATT real porque nunca hace la auth de servidor.
+1. **DRM server-backed, 100% confirmado.** Requiere `access_token` de la cuenta + round-trip al
+   servidor. Un cliente propio reprodujo el `204` y el unlock completo sin la app oficial.
+2. **Los tres campos los genera el dispositivo.** El bridge NO construye id ni firma: reenvía los
+   82B verbatim. Esto cierra el antiguo "gran desconocido" del origen de los campos 2 y 3.
+3. **El reto es PLAINTEXT en CH02** → no se necesita la cripto de sesión para desbloquear. La cripto
+   (AES-256-CCM) solo hace falta para decodificar botones/telemetría DESPUÉS del unlock.
+4. **`FF 04 00` es la confirmación de unlock**, válida solo tras el `204`.
+5. **`58 02` no es un rechazo fatal**: es una trama de estado en CH04; el reto llega igual.
+6. La pubkey EC del dispositivo (para derivar la sesión) se recupera **descomprimiendo el campo 1**
+   del reto (X + paridad → Y); su clave estática nunca aparece en claro por BLE.
 
-## Lo que necesita un bridge de terceros (ético)
+## Implementación en este repo
 
-1. Obtener un `access_token` OAuth de **la propia cuenta Zwift del usuario** (login con su cuenta).
-2. BLE: handshake `RideOn 02 03` con el dispositivo (write CH03, indicate CH04).
-3. HTTP: `POST …/api/d-lock-service/device/authenticate` con `Authorization: Bearer <token>` y el
-   protobuf `{1: pubkey_comprimida, 2: id, 3: firma}` → esperar `204`.
-4. BLE: escribir `FF 04 00` en CH03.
-5. El dispositivo queda desbloqueado → fluye la sesión cifrada ZAP (AES-256-CCM).
+- Parseo del reto: [`src/Auth/DeviceAuthChallenge.cs`](../../src/Auth/DeviceAuthChallenge.cs) (`TryParse`).
+- POST verbatim + Bearer: [`src/Auth/DeviceUnlockClient.cs`](../../src/Auth/DeviceUnlockClient.cs).
+- Login con la cuenta del usuario: [`src/Auth/ZwiftOAuthClient.cs`](../../src/Auth/ZwiftOAuthClient.cs) (ver [zwift-login.md](zwift-login.md)).
+- Orquestación BLE: [`src/Bridge/ZwiftClickBridge.cs`](../../src/Bridge/ZwiftClickBridge.cs).
 
-## ⚠️ Desconocido que aún bloquea la implementación completa
+## Pendiente (solo post-unlock)
 
-El **origen exacto de los campos 2 (id) y 3 (firma de 40B)**. El campo 1 sale del handshake BLE;
-los campos 2 y 3 los emite el dispositivo y la app los lee por BLE (¿handshake en fragmentos de
-continuación? ¿CH100/101/102?). Hasta resolverlo no se puede generar un request `authenticate`
-válido. Pistas en el decompile: `FUN_14050d1d0` ("Received auth challenge"), `FUN_14050a3a0`,
-`ZpHwAuthenticationEvent`.
-
-## Pendiente (menor prioridad)
-
-- Esquema de la firma (campo 3, 40B): qué algoritmo y qué firma (¿nonce de challenge del dispositivo?).
-- Verificar la pubkey comprimida (campo 1) contra la pubkey de 64B del handshake BLE.
-- Confirmar si `FF 04 00` es necesario en cada sesión o solo en el primer unlock diario.
+- Decodificar CH02 tras el unlock (AES-256-CCM): derivar la clave de sesión con ECDH (priv local +
+  **campo 1 descomprimido**) y zanjar HKDF-info / modo ECDH usando el reto en claro como oráculo
+  autovalidante. Necesario solo para botones/telemetría, **no** para el unlock.
