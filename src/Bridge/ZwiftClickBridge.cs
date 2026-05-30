@@ -84,6 +84,20 @@ public sealed class ZwiftClickBridge : IDisposable
     /// <summary>Se dispara cuando un botón del mando se tradujo a una tecla.</summary>
     public event Action<BridgeButtonEvent>? ButtonEmitted;
 
+    /// <summary>
+    /// Diagnóstico: cada trama CRUDA recibida en CH02 después del unlock (hex + interpretación).
+    /// Sirve para mapear el formato real de los botones del Click V2 (hoy sin confirmar en hardware).
+    /// </summary>
+    public event Action<string>? DiagnosticFrame;
+
+    /// <summary>
+    /// Modo aprendizaje: si está activo, NO se filtran las tramas; se muestran todas en crudo para
+    /// poder mapear qué bytes corresponden a cada botón. La emulación de teclas sigue funcionando.
+    /// </summary>
+    public bool LearningMode { get; set; } = true;
+
+    private int _postUnlockFrameCount;
+
     private void Report(BridgePhase phase, string message, bool isError = false)
         => ProgressChanged?.Invoke(new BridgeProgress(phase, message, isError));
 
@@ -212,7 +226,7 @@ public sealed class ZwiftClickBridge : IDisposable
 
         Console.WriteLine($"\n✅ UNLOCK COMPLETO ({sw.ElapsedMilliseconds}ms). Escuchando botones en CH02…");
         Console.WriteLine("   (la cripto de sesión se auto-resolverá con las primeras tramas cifradas)");
-        Report(BridgePhase.Listening, "¡Listo! Tu mando está desbloqueado. Pulsa sus botones y se convertirán en teclas.");
+        Report(BridgePhase.Listening, "¡Listo! Mando desbloqueado. Pulsa los botones + y − VARIAS veces: verás aparecer el detalle de cada pulsación en el registro.");
         return true;
     }
 

@@ -44,6 +44,8 @@ public sealed class BridgeRunner
 
     public event Action<BridgeProgress>? ProgressChanged;
     public event Action<BridgeButtonEvent>? ButtonEmitted;
+    /// <summary>Diagnóstico: hex crudo de cada trama post-unlock (para mapear botones).</summary>
+    public event Action<string>? DiagnosticFrame;
     /// <summary>Se dispara al terminar el arranque: éxito = puente operativo (escuchando botones).</summary>
     public event Action<bool>? Finished;
 
@@ -62,6 +64,7 @@ public sealed class BridgeRunner
             bridge.SetKeyMapping(options.KeyMinus, options.KeyPlus);
             bridge.ProgressChanged += p => _ui.BeginInvoke(() => ProgressChanged?.Invoke(p));
             bridge.ButtonEmitted += b => _ui.BeginInvoke(() => ButtonEmitted?.Invoke(b));
+            bridge.DiagnosticFrame += f => _ui.BeginInvoke(() => DiagnosticFrame?.Invoke(f));
             _bridge = bridge;
 
             bool ok = await bridge.StartAsync(options.DeviceName, token);

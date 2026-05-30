@@ -142,6 +142,7 @@ public partial class ConnectView : UserControl
         _runner = new BridgeRunner();
         _runner.ProgressChanged += OnProgress;
         _runner.ButtonEmitted += OnButton;
+        _runner.DiagnosticFrame += OnDiagnosticFrame;
         _runner.Finished += OnFinished;
         _runner.Start(options);
     }
@@ -251,6 +252,21 @@ public partial class ConnectView : UserControl
         lblLastButton.Text = symbol;
         lblLastButton.Foreground = B("BloomBrush");
         lblCount.Text = $"Botón {b.Label} · {_buttonCount} pulsación(es)";
+    }
+
+    private void OnDiagnosticFrame(string line)
+    {
+        // Tramas crudas post-unlock: en un color distinto, monoespaciado, para leer el hex.
+        spLog.Children.Add(new TextBlock
+        {
+            Text = "  🔬 " + line,
+            FontSize = 11.5,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas, monospace"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4),
+            Foreground = B("LilacBrush")
+        });
+        scLog.ScrollToEnd();
     }
 
     private void OnFinished(bool ok)
