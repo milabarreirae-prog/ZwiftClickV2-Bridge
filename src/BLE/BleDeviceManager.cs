@@ -31,15 +31,21 @@ public class BleDeviceManager
     public bool IsConnected => _device?.ConnectionStatus == BluetoothConnectionStatus.Connected;
 
     /// <summary>
-    /// Escanea dispositivos BLE buscando "Zwift Click" y se conecta.
+    /// Escanea dispositivos BLE cuyo nombre CONTENGA <paramref name="deviceName"/> (sin distinguir
+    /// mayúsculas) y se conecta al primero. Con <paramref name="deviceName"/> = "Zwift" reconoce
+    /// Click, Play y Ride. <paramref name="onNewDeviceSeen"/> recibe, una sola vez cada uno, los
+    /// nombres de dispositivos anunciándose cerca — útil para diagnosticar por qué no aparece el mando.
     /// </summary>
-    public async Task<BluetoothLEDevice?> ConnectAsync(string deviceName = "Zwift Click", TimeSpan? timeout = null)
+    public async Task<BluetoothLEDevice?> ConnectAsync(string deviceName = "Zwift", TimeSpan? timeout = null,
+        Action<string>? onNewDeviceSeen = null)
     {
         timeout ??= TimeSpan.FromSeconds(30);
         Console.WriteLine($"🔍 Escaneando '{deviceName}' ({timeout.Value.TotalSeconds:F0}s)...");
 
         var tcs = new TaskCompletionSource<ulong>();
         using var cts = new CancellationTokenSource(timeout.Value);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenLock = new object();
 
         var watcher = new BluetoothLEAdvertisementWatcher
         {
@@ -48,10 +54,20 @@ public class BleDeviceManager
 
         watcher.Received += (s, args) =>
         {
-            if (!string.IsNullOrEmpty(args.Advertisement.LocalName) &&
-                args.Advertisement.LocalName.StartsWith(deviceName, StringComparison.OrdinalIgnoreCase))
+            string name = args.Advertisement.LocalName;
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            bool isNew;
+            lock (seenLock) { isNew = seen.Add(name); }
+            if (isNew)
             {
-                Console.WriteLine($"   ✅ Encontrado: {args.Advertisement.LocalName} (0x{args.BluetoothAddress:X})");
+                Console.WriteLine($"   📡 Visto: {name}");
+                onNewDeviceSeen?.Invoke(name);
+            }
+
+            if (name.Contains(deviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"   ✅ Encontrado: {name} (0x{args.BluetoothAddress:X})");
                 tcs.TrySetResult(args.BluetoothAddress);
             }
         };

@@ -17,6 +17,13 @@ public class KeyboardEmulator
     public const byte VK_RETURN = 0x0D;
     public const byte VK_TAB = 0x09;
 
+    // Letras útiles para apps de ciclismo indoor (cambio de marcha virtual, dirección…).
+    public const byte VK_I = 0x49;  // marcha arriba (MyWoosh: Shift Up)
+    public const byte VK_K = 0x4B;  // marcha abajo  (MyWoosh: Shift Down)
+    public const byte VK_A = 0x41;  // dirección izquierda
+    public const byte VK_D = 0x44;  // dirección derecha
+    public const byte VK_U = 0x55;  // alternar UI mínima
+
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT
     {

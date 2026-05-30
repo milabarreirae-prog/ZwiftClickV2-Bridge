@@ -177,7 +177,18 @@ public partial class ConnectView : UserControl
             mode = AuthMode.UsernamePassword;
         }
 
-        string device = string.IsNullOrWhiteSpace(txtDevice.Text) ? "Zwift Click" : txtDevice.Text.Trim();
+        string device = string.IsNullOrWhiteSpace(txtDevice.Text) ? "Zwift" : txtDevice.Text.Trim();
+
+        // Mapeo de botones según el preset elegido (− , +).
+        string preset = (cmbMapping.SelectedItem as ComboBoxItem)?.Tag as string ?? "gears";
+        (byte minus, byte plus) = preset switch
+        {
+            "arrows" => (KeyboardEmulator.VK_LEFT, KeyboardEmulator.VK_RIGHT),
+            "steer" => (KeyboardEmulator.VK_A, KeyboardEmulator.VK_D),
+            _ => (KeyboardEmulator.VK_K, KeyboardEmulator.VK_I),   // gears (MyWoosh)
+        };
+        if (chkSwap.IsChecked == true)
+            (minus, plus) = (plus, minus);
 
         return new RunOptions
         {
@@ -186,7 +197,9 @@ public partial class ConnectView : UserControl
             Password = pass,
             Token = token,
             DeviceName = device,
-            EmulateKeyboard = chkKeyboard.IsChecked == true
+            EmulateKeyboard = chkKeyboard.IsChecked == true,
+            KeyMinus = minus,
+            KeyPlus = plus
         };
     }
 
@@ -226,10 +239,18 @@ public partial class ConnectView : UserControl
     private void OnButton(BridgeButtonEvent b)
     {
         _buttonCount++;
-        string arrow = b.Label switch { "Izquierda" => "←", "Derecha" => "→", _ => "•" };
-        lblLastButton.Text = arrow;
+        // Símbolo grande según la tecla emulada (no según el lado), para que coincida con el mapeo.
+        string symbol = b.VirtualKey switch
+        {
+            KeyboardEmulator.VK_I => "+",
+            KeyboardEmulator.VK_K => "−",
+            KeyboardEmulator.VK_RIGHT or KeyboardEmulator.VK_D => "→",
+            KeyboardEmulator.VK_LEFT or KeyboardEmulator.VK_A => "←",
+            _ => "•"
+        };
+        lblLastButton.Text = symbol;
         lblLastButton.Foreground = B("BloomBrush");
-        lblCount.Text = $"{b.Label} · {_buttonCount} pulsación(es)";
+        lblCount.Text = $"Botón {b.Label} · {_buttonCount} pulsación(es)";
     }
 
     private void OnFinished(bool ok)

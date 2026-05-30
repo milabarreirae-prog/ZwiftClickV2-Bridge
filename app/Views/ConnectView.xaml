@@ -50,13 +50,29 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Mapeo de botones -->
+                <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource FieldLabel}" Text="QUÉ HACEN LOS BOTONES + / −" />
+                        <ComboBox x:Name="cmbMapping" Margin="0,2,0,0" SelectedIndex="0">
+                            <ComboBoxItem Content="Cambio de marchas — MyWoosh  (+ sube · − baja)" Tag="gears" />
+                            <ComboBoxItem Content="Flechas  (+ → · − ←)" Tag="arrows" />
+                            <ComboBoxItem Content="Dirección  (+ D · − A)" Tag="steer" />
+                        </ComboBox>
+                        <CheckBox x:Name="chkSwap" Foreground="{StaticResource TextBrush}" Margin="2,12,0,0"
+                                  Content="Invertir + y −  (márcalo si salen al revés)" />
+                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="2,8,0,0"
+                                   Text="En MyWoosh: I sube de marcha y K baja. Como aún no está confirmado en hardware qué botón es +, si te salen cambiados activa «Invertir»." />
+                    </StackPanel>
+                </Border>
+
                 <!-- Opciones avanzadas -->
                 <Expander Margin="0,14,0,0" Foreground="{StaticResource LilacBrush}" Header="Opciones avanzadas">
                     <StackPanel Margin="0,10,0,0">
                         <TextBlock Style="{StaticResource FieldLabel}" Text="NOMBRE BLUETOOTH DEL MANDO" />
-                        <TextBox x:Name="txtDevice" Text="Zwift Click" />
+                        <TextBox x:Name="txtDevice" Text="Zwift" />
                         <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="2,6,0,0"
-                                   Text="Es el nombre con el que tu mando se anuncia por Bluetooth. Cámbialo solo si el tuyo usa otro." />
+                                   Text="Buscamos cualquier mando cuyo nombre contenga este texto. «Zwift» reconoce Click, Play y Ride. Afínalo si tienes varios." />
                         <CheckBox x:Name="chkKeyboard" Foreground="{StaticResource TextBrush}" Margin="2,14,0,0" IsChecked="True"
                                   Content="Emular teclado (recomendado)" />
                     </StackPanel>

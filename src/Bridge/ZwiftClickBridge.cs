@@ -35,6 +35,12 @@ public sealed class ZwiftClickBridge : IDisposable
     private readonly StructuredLogger _logger = new();
     private readonly bool _emulateKeyboard;
 
+    // Mapeo de los dos botones del mando a teclas. Por defecto: cambio de marcha de MyWoosh
+    // (+ = subir = tecla I, − = bajar = tecla K). Configurable desde la interfaz.
+    // _keyPlus se asocia al botón "derecha/+" del protocolo; _keyMinus al "izquierda/−".
+    private byte _keyMinus = KeyboardEmulator.VK_K;
+    private byte _keyPlus = KeyboardEmulator.VK_I;
+
     private ECDiffieHellman? _ourKey;
     private byte[]? _ourPubKey65;
 
@@ -56,6 +62,17 @@ public sealed class ZwiftClickBridge : IDisposable
     }
 
     public bool IsOperational => _ble.IsConnected && _unlocked;
+
+    /// <summary>
+    /// Define qué tecla emula cada botón del mando. <paramref name="minusKey"/> es el botón "−"
+    /// (evento izquierda) y <paramref name="plusKey"/> el botón "+" (evento derecha). Códigos de
+    /// tecla virtual de Windows (ver <see cref="KeyboardEmulator"/>).
+    /// </summary>
+    public void SetKeyMapping(byte minusKey, byte plusKey)
+    {
+        _keyMinus = minusKey;
+        _keyPlus = plusKey;
+    }
 
     /// <summary>
     /// Canal de progreso OPCIONAL en lenguaje humano (lo usa la interfaz gráfica para explicar cada
@@ -84,10 +101,25 @@ public sealed class ZwiftClickBridge : IDisposable
 
         // ── 1. Conectar BLE y resolver características por UUID ──────────
         Report(BridgePhase.Scanning, "Buscando tu mando por Bluetooth… enciéndelo o pulsa un botón.");
-        var device = await _ble.ConnectAsync(deviceName);
+        var seenDevices = new List<string>();
+        var device = await _ble.ConnectAsync(deviceName, onNewDeviceSeen: name =>
+        {
+            lock (seenDevices) seenDevices.Add(name);
+            Report(BridgePhase.Scanning, $"📡 Veo cerca: «{name}»");
+        });
         if (device == null)
         {
-            Report(BridgePhase.Failed, "No encontré el mando. Comprueba que el Bluetooth está activo y el mando despierto.", true);
+            string vistos;
+            lock (seenDevices)
+            {
+                vistos = seenDevices.Count > 0
+                    ? "Vi estos dispositivos Bluetooth: " + string.Join(", ", seenDevices) + ". "
+                    : "No vi NINGÚN dispositivo anunciándose por Bluetooth. ";
+            }
+            Report(BridgePhase.Failed,
+                $"No encontré un mando cuyo nombre contenga «{deviceName}». {vistos}" +
+                "Prueba: pulsa un botón del mando para despertarlo; ciérralo en otras apps (móvil, Zwift) para que no esté ya conectado; " +
+                "y si arriba ves el nombre real de tu mando, escríbelo en «Opciones avanzadas».", true);
             return false;
         }
         Report(BridgePhase.Connecting, "Mando encontrado. Abriendo el canal seguro…");
@@ -238,20 +270,23 @@ public sealed class ZwiftClickBridge : IDisposable
             return;
 
         var evt = ZopPeripheralEvent.Parse(plaintext.AsSpan(1).ToArray());
-        byte vk = evt.ToVirtualKey();
+
+        // Lado del botón → tecla configurada (por defecto cambio de marcha: − = K, + = I).
+        bool isMinus = evt.Type is ZopPeripheralEvent.EventType.LeftClick or ZopPeripheralEvent.EventType.LeftHold;
+        bool isPlus = evt.Type is ZopPeripheralEvent.EventType.RightClick or ZopPeripheralEvent.EventType.RightHold;
+        if (!isMinus && !isPlus)
+            return;
+
+        byte vk = isPlus ? _keyPlus : _keyMinus;
+        string label = isPlus ? "+ (subir)" : "− (bajar)";
+
         if (vk != 0 && _emulateKeyboard)
         {
             _keyboard.SendKeyPress(vk);
-            Console.WriteLine($"🎮 {evt} → tecla 0x{vk:X2}");
+            Console.WriteLine($"🎮 {label} → tecla 0x{vk:X2}");
         }
         if (vk != 0)
         {
-            string label = evt.Type switch
-            {
-                ZopPeripheralEvent.EventType.LeftClick or ZopPeripheralEvent.EventType.LeftHold => "Izquierda",
-                ZopPeripheralEvent.EventType.RightClick or ZopPeripheralEvent.EventType.RightHold => "Derecha",
-                _ => evt.Type.ToString()
-            };
             ButtonEmitted?.Invoke(new BridgeButtonEvent(label, vk));
             Report(BridgePhase.ButtonPressed, $"Botón {label} → tecla enviada a la app activa.");
         }

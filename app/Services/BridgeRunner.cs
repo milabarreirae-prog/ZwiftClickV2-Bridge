@@ -23,8 +23,13 @@ public sealed class RunOptions
     public string? Username { get; init; }
     public string? Password { get; init; }
     public string? Token { get; init; }     // refresh o access según Mode
-    public string DeviceName { get; init; } = "Zwift Click";
+    public string DeviceName { get; init; } = "Zwift";
     public bool EmulateKeyboard { get; init; } = true;
+
+    /// <summary>Tecla virtual para el botón "−" (bajar). Por defecto K (MyWoosh Shift Down).</summary>
+    public byte KeyMinus { get; init; } = ZwiftClickV2.Bridge.Bridge.KeyboardEmulator.VK_K;
+    /// <summary>Tecla virtual para el botón "+" (subir). Por defecto I (MyWoosh Shift Up).</summary>
+    public byte KeyPlus { get; init; } = ZwiftClickV2.Bridge.Bridge.KeyboardEmulator.VK_I;
 }
 
 /// <summary>
@@ -54,6 +59,7 @@ public sealed class BridgeRunner
             string? token = await ResolveTokenAsync(options);
 
             var bridge = new ZwiftClickBridge(options.EmulateKeyboard);
+            bridge.SetKeyMapping(options.KeyMinus, options.KeyPlus);
             bridge.ProgressChanged += p => _ui.BeginInvoke(() => ProgressChanged?.Invoke(p));
             bridge.ButtonEmitted += b => _ui.BeginInvoke(() => ButtonEmitted?.Invoke(b));
             _bridge = bridge;
