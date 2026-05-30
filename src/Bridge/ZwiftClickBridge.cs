@@ -58,6 +58,19 @@ public sealed class ZwiftClickBridge : IDisposable
     public bool IsOperational => _ble.IsConnected && _unlocked;
 
     /// <summary>
+    /// Canal de progreso OPCIONAL en lenguaje humano (lo usa la interfaz gráfica para explicar cada
+    /// paso). Se dispara desde hilos de fondo: quien lo escuche debe marshalizar a su hilo de UI.
+    /// La CLI no lo usa y sigue funcionando solo con <c>Console.WriteLine</c>.
+    /// </summary>
+    public event Action<BridgeProgress>? ProgressChanged;
+
+    /// <summary>Se dispara cuando un botón del mando se tradujo a una tecla.</summary>
+    public event Action<BridgeButtonEvent>? ButtonEmitted;
+
+    private void Report(BridgePhase phase, string message, bool isError = false)
+        => ProgressChanged?.Invoke(new BridgeProgress(phase, message, isError));
+
+    /// <summary>
     /// Ejecuta la cadena de unlock. <paramref name="accessToken"/> es el Bearer de la cuenta Zwift
     /// del usuario (ya resuelto); si es null se omite la fase de red (solo captura el reto y reporta).
     /// </summary>
@@ -70,13 +83,20 @@ public sealed class ZwiftClickBridge : IDisposable
         var sw = Stopwatch.StartNew();
 
         // ── 1. Conectar BLE y resolver características por UUID ──────────
+        Report(BridgePhase.Scanning, "Buscando tu mando por Bluetooth… enciéndelo o pulsa un botón.");
         var device = await _ble.ConnectAsync(deviceName);
-        if (device == null) return false;
+        if (device == null)
+        {
+            Report(BridgePhase.Failed, "No encontré el mando. Comprueba que el Bluetooth está activo y el mando despierto.", true);
+            return false;
+        }
+        Report(BridgePhase.Connecting, "Mando encontrado. Abriendo el canal seguro…");
 
         var service = await _ble.GetServiceAsync(BleDeviceManager.ZWIFT_SERVICE_UUID);
         if (service == null)
         {
             Console.WriteLine("❌ Servicio ZAP (00000001-19CA-…) no encontrado.");
+            Report(BridgePhase.Failed, "El mando respondió pero no expone su servicio esperado. Reinícialo e inténtalo de nuevo.", true);
             return false;
         }
 
@@ -88,6 +108,7 @@ public sealed class ZwiftClickBridge : IDisposable
         if (ch02 == null || ch03 == null)
         {
             Console.WriteLine("❌ CH02/CH03 no encontrados (enlazar por UUID; los handles no son estables).");
+            Report(BridgePhase.Failed, "No encontré los canales del mando. Reinícialo e inténtalo de nuevo.", true);
             return false;
         }
         _writer.RegisterCharacteristic(BleDeviceManager.CH03_UUID, ch03);
@@ -101,11 +122,13 @@ public sealed class ZwiftClickBridge : IDisposable
 
         // ── 3. Handshake "RideOn 02 03" + pubkey[64] ────────────────────
         Console.WriteLine("\n[1/4] Handshake BLE (RideOn 02 03 + pubkey64)…");
+        Report(BridgePhase.Handshake, "Saludo seguro: tu PC y el mando intercambian llaves (ECDH).");
         SendHandshake();
 
         // ── 4. Esperar el reto que emite el dispositivo en CH02 ─────────
         Console.WriteLine("[2/4] Esperando el reto del dispositivo en CH02…");
         Console.WriteLine("      (si no llega, despierta el Click pulsando un botón)");
+        Report(BridgePhase.WaitingChallenge, "Esperando a que el mando cree su reto. Si tarda, pulsa un botón del mando.");
         DeviceAuthChallenge challenge;
         try
         {
@@ -115,20 +138,24 @@ public sealed class ZwiftClickBridge : IDisposable
         catch (OperationCanceledException)
         {
             Console.WriteLine($"❌ No llegó el reto en {ChallengeTimeoutMs / 1000}s.");
+            Report(BridgePhase.Failed, $"El mando no respondió en {ChallengeTimeoutMs / 1000}s. Despiértalo pulsando un botón y reintenta.", true);
             return false;
         }
         Console.WriteLine($"   ✅ Reto capturado: id={challenge.DeviceId}, body={challenge.Body.Length}B, " +
                           $"pubkey={Convert.ToHexString(challenge.DevicePublicKeyCompressed)[..12]}…");
         _logger.Log("auth_challenge", "rx", "CH02", challenge.Body, $"id={challenge.DeviceId}");
+        Report(BridgePhase.ChallengeCaptured, "El mando creó su reto y tu PC lo recibió. Tu PC no lo firma: solo lo reenvía.");
 
         if (accessToken == null)
         {
             Console.WriteLine("\n[3/4] Fase de red OMITIDA (sin credenciales). Reto capturado correctamente.");
+            Report(BridgePhase.Stopped, "Diagnóstico OK: el mando responde. Falta iniciar sesión con tu cuenta para desbloquear.");
             return false;
         }
 
         // ── 5. POST verbatim a d-lock-service ───────────────────────────
         Console.WriteLine("\n[3/4] POST d-lock-service/device/authenticate (body verbatim + Bearer)…");
+        Report(BridgePhase.ServerAuth, "Comprobando con tu cuenta que este mando es tuyo (verificación en el servidor).");
         UnlockDecision decision;
         using (var unlock = new DeviceUnlockClient())
         {
@@ -137,10 +164,14 @@ public sealed class ZwiftClickBridge : IDisposable
         Console.WriteLine($"   d-lock → HTTP {decision.HttpStatusCode}: {decision.Notes}");
         _logger.LogInfo($"d-lock result: {decision.HttpStatusCode} authorized={decision.ShouldSendUnlockConfirm}");
         if (!decision.ShouldSendUnlockConfirm)
+        {
+            Report(BridgePhase.Failed, $"Tu cuenta no autorizó el mando (HTTP {decision.HttpStatusCode}). Revisa que has iniciado sesión con la cuenta dueña del mando.", true);
             return false;
+        }
 
         // ── 6. Unlock BLE (FF 04 00) + sesión cifrada ───────────────────
         Console.WriteLine("\n[4/4] Unlock BLE: write FF 04 00 → CH03…");
+        Report(BridgePhase.Unlocking, "¡Cuenta autorizada! Enviando la señal de desbloqueo al mando.");
         await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, ZapCommands.UnlockConfirm);
 
         SetupSessionBakeoff(challenge.DevicePublicKeyCompressed);
@@ -148,6 +179,7 @@ public sealed class ZwiftClickBridge : IDisposable
 
         Console.WriteLine($"\n✅ UNLOCK COMPLETO ({sw.ElapsedMilliseconds}ms). Escuchando botones en CH02…");
         Console.WriteLine("   (la cripto de sesión se auto-resolverá con las primeras tramas cifradas)");
+        Report(BridgePhase.Listening, "¡Listo! Tu mando está desbloqueado. Pulsa sus botones y se convertirán en teclas.");
         return true;
     }
 
@@ -185,6 +217,7 @@ public sealed class ZwiftClickBridge : IDisposable
 
             Console.WriteLine($"   🔓 Cripto de sesión resuelta por bake-off: [{_session.Label}]");
             _logger.LogInfo($"Session crypto resolved: {_session.Label}");
+            Report(BridgePhase.SessionResolved, "Canal cifrado resuelto: los botones del mando ya se leen correctamente.");
             foreach (byte[] buffered in _postUnlockBuffer)
                 EmitButton(buffered);
             _postUnlockBuffer.Clear();
@@ -211,6 +244,17 @@ public sealed class ZwiftClickBridge : IDisposable
             _keyboard.SendKeyPress(vk);
             Console.WriteLine($"🎮 {evt} → tecla 0x{vk:X2}");
         }
+        if (vk != 0)
+        {
+            string label = evt.Type switch
+            {
+                ZopPeripheralEvent.EventType.LeftClick or ZopPeripheralEvent.EventType.LeftHold => "Izquierda",
+                ZopPeripheralEvent.EventType.RightClick or ZopPeripheralEvent.EventType.RightHold => "Derecha",
+                _ => evt.Type.ToString()
+            };
+            ButtonEmitted?.Invoke(new BridgeButtonEvent(label, vk));
+            Report(BridgePhase.ButtonPressed, $"Botón {label} → tecla enviada a la app activa.");
+        }
     }
 
     private void OnCh04Frame(byte[] data)
@@ -236,6 +280,7 @@ public sealed class ZwiftClickBridge : IDisposable
         _stopped = true;
         _ble.Disconnect();
         _logger.Dispose();
+        Report(BridgePhase.Stopped, "Bridge detenido.");
     }
 
     public void Dispose() => Stop();

@@ -2,6 +2,20 @@
 [Bb]in/
 [Oo]bj/
 
+# Aplicación empaquetada para distribución
+dist/
+
+# Recursos del asistente generados (se regeneran con make-installer-assets.ps1)
+installer/assets/
+
+# Certificados de firma (NUNCA subir claves privadas)
+*.pfx
+*.snk
+
+# Salidas temporales de compilación/tests
+build_*.txt
+test_out.txt
+
 # Runtime logs
 logs/
 *.log

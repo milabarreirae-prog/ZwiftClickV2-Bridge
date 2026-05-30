@@ -11,6 +11,24 @@ ECDH, unlock server-backed con **tu propia cuenta Zwift**, y sesión cifrada AES
 > **Interoperabilidad para uso personal de hardware que posees.** No evade pagos ni DRM de
 > contenido; no redistribuye software de Zwift. Lee el [aviso ético/legal](#-aviso-éticolegal).
 
+## 🖥️ App de escritorio: **Violeta**
+
+Además de la CLI, el repo incluye **Violeta** (`app/`): una **aplicación de Windows 11 con interfaz
+amigable**, pensada para cualquier persona. Tiene una pantalla **«Cómo funciona»** que explica, paso a
+paso y en lenguaje humano, qué hace el software por detrás, y una pantalla **«Conectar»** que ilumina
+cada paso **en tiempo real** mientras desbloquea tu mando. Paleta violeta/lila, logo de una ciclista
+con una flor, y un mensaje claro: **es gratis, libre y siempre lo será**. Hecha con cariño por una
+mujer trans 🏳️‍⚧️.
+
+```powershell
+dotnet run --project app                 # ejecutar la interfaz gráfica
+.\scripts\publish-app.ps1                 # empaquetar Violeta.exe autocontenido en dist\Violeta\
+```
+
+La app reutiliza exactamente la misma lógica probada del bridge (BLE, cripto, unlock, teclado): no
+reimplementa el protocolo, solo le pone una cara bonita. Detalle de empaquetado en
+[`docs/PACKAGING.md`](docs/PACKAGING.md).
+
 ## 📊 Estado
 
 | Componente | Estado |
