@@ -1,0 +1,215 @@
+<UserControl x:Class="Violeta.Controls.ClickDeck"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Mando Click V2 en vivo. Fiel al hardware real: una cruceta de 4 flechas, un diamante de 4
+        botones de acción (A/B/X/Y) y dos levas de cambio (+/−). Cada pieza se ILUMINA al pulsarla
+        (ver ClickDeck.xaml.cs → Flash). Todo vectorial: nítido a cualquier tamaño.
+
+        Convención de nombres para el code-behind:  scl{N}=escala · glow{N}=resplandor · lit{N}=cara
+        encendida.  N ∈ Plus Minus Up Down Left Right A B X Y.
+    -->
+    <Viewbox Stretch="Uniform">
+        <Grid Width="600" Height="300">
+
+            <!-- Cuerpo del mando (placa de vidrio) -->
+            <Border CornerRadius="38" Margin="6"
+                    BorderThickness="1.4">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0.4,1">
+                        <GradientStop Color="#2E2050" Offset="0" />
+                        <GradientStop Color="#1C1233" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+                <Border.BorderBrush>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#6A4CA8" Offset="0" />
+                        <GradientStop Color="#3A2860" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.BorderBrush>
+                <Border.Effect>
+                    <DropShadowEffect Color="#000000" BlurRadius="34" ShadowDepth="10" Opacity="0.5" Direction="270" />
+                </Border.Effect>
+            </Border>
+            <!-- Brillo superior del cuerpo -->
+            <Border CornerRadius="38,38,0,0" Margin="7,7,7,0" Height="80" VerticalAlignment="Top">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#22FFFFFF" Offset="0" />
+                        <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- Fila de clústeres -->
+            <Grid Margin="26,18">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />   <!-- leva − -->
+                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition Width="Auto" />   <!-- cruceta -->
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />   <!-- diamante -->
+                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition Width="Auto" />   <!-- leva + -->
+                </Grid.ColumnDefinitions>
+
+                <!-- ══ Leva − (bajar marcha) ══ -->
+                <Grid Grid.Column="0" Width="66" Height="232" RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center">
+                    <Grid.RenderTransform><ScaleTransform x:Name="sclMinus" /></Grid.RenderTransform>
+                    <Grid.Effect><DropShadowEffect x:Name="glowMinus" Color="#C4A5FF" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                    <Border CornerRadius="30" BorderThickness="1.3" BorderBrush="#4A3470">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#3A2860" Offset="0" />
+                                <GradientStop Color="#241634" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <Border x:Name="litMinus" CornerRadius="30" Opacity="0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#C4A5FF" Offset="0" />
+                                <GradientStop Color="#8B5CF6" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <TextBlock Text="−" FontSize="46" FontWeight="Bold" Foreground="#F1E9FF"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock Text="BAJAR" FontSize="9.5" FontWeight="SemiBold" Foreground="#B7A6D6"
+                               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" />
+                </Grid>
+
+                <!-- ══ Cruceta direccional ══ -->
+                <Grid Grid.Column="2" Width="168" Height="168" VerticalAlignment="Center">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" /><RowDefinition Height="1.15*" /><RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="1.15*" /><ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Hub central -->
+                    <Border Grid.Row="1" Grid.Column="1" CornerRadius="16" Margin="3" Background="#1B1130" BorderBrush="#3A2860" BorderThickness="1" />
+
+                    <!-- Arriba (UI mínima · U) -->
+                    <Grid Grid.Row="0" Grid.Column="1" Margin="3" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclUp" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowUp" Color="#A78BFA" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="16,16,7,7" Background="#2A1C42" BorderBrush="#4A3470" BorderThickness="1.2" />
+                        <Border x:Name="litUp" CornerRadius="16,16,7,7" Opacity="0" Background="#9B7BF0" />
+                        <TextBlock Text="↑" FontSize="24" FontWeight="Bold" Foreground="#E6D8FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- Abajo (Ocultar UI · H) -->
+                    <Grid Grid.Row="2" Grid.Column="1" Margin="3" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclDown" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowDown" Color="#A78BFA" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="7,7,16,16" Background="#2A1C42" BorderBrush="#4A3470" BorderThickness="1.2" />
+                        <Border x:Name="litDown" CornerRadius="7,7,16,16" Opacity="0" Background="#9B7BF0" />
+                        <TextBlock Text="↓" FontSize="24" FontWeight="Bold" Foreground="#E6D8FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- Izquierda (←) -->
+                    <Grid Grid.Row="1" Grid.Column="0" Margin="3" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclLeft" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowLeft" Color="#A78BFA" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="16,7,7,16" Background="#2A1C42" BorderBrush="#4A3470" BorderThickness="1.2" />
+                        <Border x:Name="litLeft" CornerRadius="16,7,7,16" Opacity="0" Background="#9B7BF0" />
+                        <TextBlock Text="←" FontSize="24" FontWeight="Bold" Foreground="#E6D8FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- Derecha (→) -->
+                    <Grid Grid.Row="1" Grid.Column="2" Margin="3" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclRight" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowRight" Color="#A78BFA" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="7,16,16,7" Background="#2A1C42" BorderBrush="#4A3470" BorderThickness="1.2" />
+                        <Border x:Name="litRight" CornerRadius="7,16,16,7" Opacity="0" Background="#9B7BF0" />
+                        <TextBlock Text="→" FontSize="24" FontWeight="Bold" Foreground="#E6D8FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Grid>
+
+                <!-- ══ Diamante de acción (A/B/X/Y) ══ -->
+                <Grid Grid.Column="4" Width="180" Height="180" VerticalAlignment="Center">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" /><RowDefinition Height="*" /><RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Y (arriba · emote 4) -->
+                    <Grid Grid.Row="0" Grid.Column="1" Margin="4" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclY" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowY" Color="#F472B6" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="999" Background="#2A1C42" BorderBrush="#5A3F8C" BorderThickness="1.4" />
+                        <Border x:Name="litY" CornerRadius="999" Opacity="0">
+                            <Border.Background>
+                                <RadialGradientBrush><GradientStop Color="#F9A8D4" Offset="0" /><GradientStop Color="#E0509E" Offset="1" /></RadialGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="Y" FontSize="22" FontWeight="Bold" Foreground="#F7C9E3" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- X (izquierda · emote 3) -->
+                    <Grid Grid.Row="1" Grid.Column="0" Margin="4" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclX" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowX" Color="#F472B6" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="999" Background="#2A1C42" BorderBrush="#5A3F8C" BorderThickness="1.4" />
+                        <Border x:Name="litX" CornerRadius="999" Opacity="0">
+                            <Border.Background>
+                                <RadialGradientBrush><GradientStop Color="#F9A8D4" Offset="0" /><GradientStop Color="#E0509E" Offset="1" /></RadialGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="X" FontSize="22" FontWeight="Bold" Foreground="#F7C9E3" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- B (derecha · emote 2) -->
+                    <Grid Grid.Row="1" Grid.Column="2" Margin="4" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclB" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowB" Color="#F472B6" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="999" Background="#2A1C42" BorderBrush="#5A3F8C" BorderThickness="1.4" />
+                        <Border x:Name="litB" CornerRadius="999" Opacity="0">
+                            <Border.Background>
+                                <RadialGradientBrush><GradientStop Color="#F9A8D4" Offset="0" /><GradientStop Color="#E0509E" Offset="1" /></RadialGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="B" FontSize="22" FontWeight="Bold" Foreground="#F7C9E3" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <!-- A (abajo · emote 1) -->
+                    <Grid Grid.Row="2" Grid.Column="1" Margin="4" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><ScaleTransform x:Name="sclA" /></Grid.RenderTransform>
+                        <Grid.Effect><DropShadowEffect x:Name="glowA" Color="#F472B6" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                        <Border CornerRadius="999" Background="#2A1C42" BorderBrush="#5A3F8C" BorderThickness="1.4" />
+                        <Border x:Name="litA" CornerRadius="999" Opacity="0">
+                            <Border.Background>
+                                <RadialGradientBrush><GradientStop Color="#F9A8D4" Offset="0" /><GradientStop Color="#E0509E" Offset="1" /></RadialGradientBrush>
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="A" FontSize="22" FontWeight="Bold" Foreground="#F7C9E3" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Grid>
+
+                <!-- ══ Leva + (subir marcha) ══ -->
+                <Grid Grid.Column="6" Width="66" Height="232" RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center">
+                    <Grid.RenderTransform><ScaleTransform x:Name="sclPlus" /></Grid.RenderTransform>
+                    <Grid.Effect><DropShadowEffect x:Name="glowPlus" Color="#C4A5FF" ShadowDepth="0" BlurRadius="0" Opacity="0" /></Grid.Effect>
+                    <Border CornerRadius="30" BorderThickness="1.3" BorderBrush="#4A3470">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#3A2860" Offset="0" />
+                                <GradientStop Color="#241634" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <Border x:Name="litPlus" CornerRadius="30" Opacity="0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#C4A5FF" Offset="0" />
+                                <GradientStop Color="#8B5CF6" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <TextBlock Text="+" FontSize="42" FontWeight="Bold" Foreground="#F1E9FF"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBlock Text="SUBIR" FontSize="9.5" FontWeight="SemiBold" Foreground="#B7A6D6"
+                               HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" />
+                </Grid>
+            </Grid>
+        </Grid>
+    </Viewbox>
+</UserControl>

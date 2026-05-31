@@ -1,0 +1,109 @@
+<UserControl x:Class="Violeta.Controls.AuroraBackground"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsHitTestVisible="False" ClipToBounds="True">
+    <!--
+        Fondo "aurora": orbes de luz que respiran detrás de toda la app. Es la estética que define el
+        diseño 2025/2026 (orbes de color sobre fondo oscuro profundo) y, felizmente, coincide con la
+        identidad de Violeta (violeta, lila, flor rosa) y guiña a la bandera trans (azul, rosa).
+        Todo vectorial + animado: ligero, nítido a cualquier tamaño, sin imágenes.
+    -->
+    <Grid>
+        <!-- Lienzo base profundo (berenjena casi negra) con un degradado vertical sutil. -->
+        <Rectangle>
+            <Rectangle.Fill>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0.3,1">
+                    <GradientStop Color="#120A1F" Offset="0" />
+                    <GradientStop Color="#160E22" Offset="0.55" />
+                    <GradientStop Color="#1A0F2E" Offset="1" />
+                </LinearGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+
+        <!-- Orbe violeta — arriba a la izquierda, el más grande. -->
+        <Ellipse Width="820" Height="820" HorizontalAlignment="Left" VerticalAlignment="Top"
+                 Margin="-220,-280,0,0" Opacity="0.55">
+            <Ellipse.Effect><BlurEffect Radius="120" /></Ellipse.Effect>
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#9B6CFF" Offset="0" />
+                    <GradientStop Color="#008B5CF6" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.RenderTransform><TranslateTransform x:Name="t1" /></Ellipse.RenderTransform>
+        </Ellipse>
+
+        <!-- Orbe rosa-flor — abajo a la derecha. -->
+        <Ellipse Width="760" Height="760" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                 Margin="0,0,-240,-260" Opacity="0.42">
+            <Ellipse.Effect><BlurEffect Radius="130" /></Ellipse.Effect>
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#F472B6" Offset="0" />
+                    <GradientStop Color="#00F472B6" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.RenderTransform><TranslateTransform x:Name="t2" /></Ellipse.RenderTransform>
+        </Ellipse>
+
+        <!-- Orbe cian (guiño bandera trans) — centro-derecha, discreto. -->
+        <Ellipse Width="560" Height="560" HorizontalAlignment="Right" VerticalAlignment="Center"
+                 Margin="0,-120,40,0" Opacity="0.22">
+            <Ellipse.Effect><BlurEffect Radius="120" /></Ellipse.Effect>
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#5BCEFA" Offset="0" />
+                    <GradientStop Color="#005BCEFA" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.RenderTransform><TranslateTransform x:Name="t3" /></Ellipse.RenderTransform>
+        </Ellipse>
+
+        <!-- Orbe lila — vagabundo central, da vida al medio. -->
+        <Ellipse Width="500" Height="500" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Margin="-80,60,0,0" Opacity="0.20">
+            <Ellipse.Effect><BlurEffect Radius="110" /></Ellipse.Effect>
+            <Ellipse.Fill>
+                <RadialGradientBrush>
+                    <GradientStop Color="#C4A5FF" Offset="0" />
+                    <GradientStop Color="#00C4A5FF" Offset="1" />
+                </RadialGradientBrush>
+            </Ellipse.Fill>
+            <Ellipse.RenderTransform><TranslateTransform x:Name="t4" /></Ellipse.RenderTransform>
+        </Ellipse>
+
+        <!-- Velo de grano/viñeta para fundir los orbes y dar profundidad. -->
+        <Rectangle>
+            <Rectangle.Fill>
+                <RadialGradientBrush GradientOrigin="0.5,0.4" Center="0.5,0.4" RadiusX="0.75" RadiusY="0.75">
+                    <GradientStop Color="#00000000" Offset="0.45" />
+                    <GradientStop Color="#55000000" Offset="1" />
+                </RadialGradientBrush>
+            </Rectangle.Fill>
+        </Rectangle>
+
+        <!-- Respiración: los orbes derivan despacio, en bucle, sin sincronía (vida orgánica). -->
+        <Grid.Triggers>
+            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetName="t1" Storyboard.TargetProperty="X"
+                                         From="0" To="60" Duration="0:0:23" AutoReverse="True" RepeatBehavior="Forever" />
+                        <DoubleAnimation Storyboard.TargetName="t1" Storyboard.TargetProperty="Y"
+                                         From="0" To="40" Duration="0:0:19" AutoReverse="True" RepeatBehavior="Forever" />
+                        <DoubleAnimation Storyboard.TargetName="t2" Storyboard.TargetProperty="X"
+                                         From="0" To="-70" Duration="0:0:27" AutoReverse="True" RepeatBehavior="Forever" />
+                        <DoubleAnimation Storyboard.TargetName="t2" Storyboard.TargetProperty="Y"
+                                         From="0" To="-44" Duration="0:0:21" AutoReverse="True" RepeatBehavior="Forever" />
+                        <DoubleAnimation Storyboard.TargetName="t3" Storyboard.TargetProperty="X"
+                                         From="0" To="-50" Duration="0:0:31" AutoReverse="True" RepeatBehavior="Forever" />
+                        <DoubleAnimation Storyboard.TargetName="t4" Storyboard.TargetProperty="Y"
+                                         From="0" To="56" Duration="0:0:25" AutoReverse="True" RepeatBehavior="Forever" />
+                        <DoubleAnimation Storyboard.TargetName="t4" Storyboard.TargetProperty="X"
+                                         From="0" To="-40" Duration="0:0:29" AutoReverse="True" RepeatBehavior="Forever" />
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Grid.Triggers>
+    </Grid>
+</UserControl>

@@ -1,196 +1,224 @@
 <UserControl x:Class="Violeta.Views.ConnectView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid Margin="40,34,40,30">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="452" />
-            <ColumnDefinition Width="32" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-
-        <!-- ══ Formulario (asistente) ══ -->
-        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-            <StackPanel>
-                <TextBlock Style="{StaticResource Display}" FontSize="28" Text="Conectar tu mando" />
-                <TextBlock Style="{StaticResource Muted}" Margin="2,8,0,0"
-                           Text="Inicia sesión, pulsa conectar y deja que Violeta haga el resto." />
-
-                <!-- Tu cuenta -->
-                <Border Style="{StaticResource CardHero}" Margin="0,20,0,0">
-                    <StackPanel>
-                        <CheckBox x:Name="chkUseAccount" Foreground="{StaticResource TextBrush}" Margin="0,0,0,3"
-                                  Content="Usar mi cuenta Zwift (modo V2 · telemetría)" />
-                        <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="2,0,0,12"
-                                   Text="Por defecto, Violeta lee los botones SIN cuenta (modo V1, recomendado). Marca esto solo si quieres el modo V2 con tu cuenta Zwift." />
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="CÓMO QUIERES ENTRAR (modo V2)" />
-                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                            <RadioButton x:Name="rbUserPass" Foreground="{StaticResource TextBrush}" IsChecked="True"
-                                         Content="Mi cuenta" Margin="0,0,18,0" Checked="Mode_Changed" />
-                            <RadioButton x:Name="rbToken" Foreground="{StaticResource TextBrush}"
-                                         Content="Token" Margin="0,0,18,0" Checked="Mode_Changed" />
-                            <RadioButton x:Name="rbDiag" Foreground="{StaticResource TextBrush}"
-                                         Content="Solo probar" Checked="Mode_Changed" />
-                        </StackPanel>
-
-                        <!-- Usuario + contraseña -->
-                        <StackPanel x:Name="pnlUserPass" Margin="0,20,0,0">
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="CORREO DE TU CUENTA" />
-                            <TextBox x:Name="txtUser" />
-                            <TextBlock Style="{StaticResource FieldLabel}" Margin="2,16,0,6" Text="CONTRASEÑA" />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <PasswordBox x:Name="pwd" Grid.Column="0" />
-                                <TextBox x:Name="txtPwdVisible" Grid.Column="0" Visibility="Collapsed" />
-                                <Button x:Name="btnReveal" Grid.Column="1" Style="{StaticResource GhostButton}"
-                                        Margin="8,0,0,0" Padding="13,10" Content="👁" Click="Reveal_Click"
-                                        ToolTip="Mostrar / ocultar la contraseña" />
-                            </Grid>
-                            <CheckBox x:Name="chkRememberEmail" Foreground="{StaticResource TextMutedBrush}" Margin="2,14,0,0"
-                                      Content="Recordar mi correo" />
-                        </StackPanel>
-
-                        <!-- Token -->
-                        <StackPanel x:Name="pnlToken" Margin="0,20,0,0" Visibility="Collapsed">
-                            <TextBlock Style="{StaticResource FieldLabel}" Text="TOKEN" />
-                            <TextBox x:Name="txtToken" />
-                            <CheckBox x:Name="chkAccess" Foreground="{StaticResource TextMutedBrush}" Margin="2,10,0,0"
-                                      Content="Es un access token ya válido (si no, se trata como refresh)" />
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" Margin="2,16,0,0">
-                            <TextBlock Text="🔒" FontSize="13" VerticalAlignment="Top" />
-                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="7,0,0,0" MaxWidth="360"
-                                       Text="Tus credenciales solo viven en memoria para iniciar sesión. Nunca se guardan ni se comparten." />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Botones del mando -->
-                <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="QUÉ HACEN LOS BOTONES DEL MANDO" />
-                        <ComboBox x:Name="cmbMapping" Margin="0,2,0,0" SelectionChanged="Preset_Changed" />
-                        <TextBlock x:Name="lblPresetDesc" Style="{StaticResource Muted}" FontSize="11.5" Margin="2,8,0,0" />
-                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="2,8,0,0"
-                                   Foreground="{StaticResource SuccessBrush}"
-                                   Text="✓ Tus botones ya vienen configurados para el Click V2: no hace falta calibrar." />
-                        <CheckBox x:Name="chkSwap" Foreground="{StaticResource TextBrush}" Margin="2,14,0,0"
-                                  Content="Invertir + y −  (si las marchas salen al revés)" />
-                        <CheckBox x:Name="chkAutoCal" Foreground="{StaticResource TextMutedBrush}" Margin="2,12,0,0"
-                                  Content="Recalibrar mis botones al conectar (normalmente no hace falta)" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Opciones avanzadas -->
-                <Expander Margin="2,14,0,0" Foreground="{StaticResource LilacBrush}" Header="Opciones avanzadas">
-                    <StackPanel Margin="0,12,0,0">
-                        <TextBlock Style="{StaticResource FieldLabel}" Text="NOMBRE BLUETOOTH DEL MANDO" />
-                        <TextBox x:Name="txtDevice" Text="Zwift" />
-                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="2,6,0,0"
-                                   Text="Buscamos cualquier mando cuyo nombre contenga este texto. «Zwift» reconoce Click, Play y Ride." />
-                        <CheckBox x:Name="chkKeyboard" Foreground="{StaticResource TextBrush}" Margin="2,14,0,0" IsChecked="True"
-                                  Content="Emular teclado (recomendado)" />
-
-                        <TextBlock Style="{StaticResource FieldLabel}" Margin="2,18,0,6" Text="RUTA DE MYWHOOSH (PARA «EMPEZAR A RODAR»)" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="txtMyWhooshPath" Grid.Column="0" />
-                            <Button x:Name="btnBrowseMyWhoosh" Grid.Column="1" Style="{StaticResource GhostButton}"
-                                    Margin="8,0,0,0" Padding="14,8" Content="Examinar…" Click="BrowseMyWhoosh_Click" />
-                        </Grid>
-                    </StackPanel>
-                </Expander>
-
-                <StackPanel Margin="0,22,0,0">
-                    <Button x:Name="btnRide" Style="{StaticResource PrimaryButtonLarge}" IsDefault="True"
-                            HorizontalAlignment="Stretch" Content="🚴  Empezar a rodar" Click="Ride_Click" />
-                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                        <Button x:Name="btnStart" Style="{StaticResource GhostButton}" Padding="18,11" Content="Solo conectar" Click="Start_Click" />
-                        <Button x:Name="btnStop" Style="{StaticResource GhostButton}" Padding="18,11" Margin="12,0,0,0" Content="Detener" IsEnabled="False" Click="Stop_Click" />
-                    </StackPanel>
-                </StackPanel>
-
-                <TextBlock x:Name="lblStatus" Style="{StaticResource Body}" Margin="2,16,0,0"
-                           Foreground="{StaticResource LilacSoftBrush}"
-                           Text="Listo para conectar." />
-            </StackPanel>
-        </ScrollViewer>
-
-        <!-- ══ En vivo ══ -->
-        <Grid Grid.Column="2">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:Violeta.Controls">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="34,24,30,28" MaxWidth="1060" HorizontalAlignment="Stretch">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />   <!-- título -->
+                <RowDefinition Height="Auto" />   <!-- héroe: cabina en vivo -->
+                <RowDefinition Height="Auto" />   <!-- cuerpo: formulario + panel en vivo -->
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0">
-                <DockPanel>
-                    <Border DockPanel.Dock="Right" Style="{StaticResource ChipMuted}" Margin="8,0,0,0" Padding="10,5" VerticalAlignment="Center">
-                        <TextBlock x:Name="lblStep" Style="{StaticResource Muted}" FontSize="11.5" Text="Listo para empezar" />
-                    </Border>
-                    <TextBlock Style="{StaticResource H2}" VerticalAlignment="Center" Text="En vivo · qué está pasando" />
-                </DockPanel>
-                <ProgressBar x:Name="prog" Height="6" Minimum="0" Maximum="6" Value="0" Margin="0,12,0,0"
-                             Background="{StaticResource SurfaceHiBrush}" Foreground="{StaticResource PrimaryBrush}"
-                             BorderThickness="0" />
+            <!-- Título -->
+            <StackPanel Grid.Row="0" Margin="4,0,0,16">
+                <TextBlock Style="{StaticResource Muted}" Text="Paso a paso, sin complicaciones" />
+                <TextBlock Style="{StaticResource Display}" FontSize="29" Text="Conectar tu mando" />
             </StackPanel>
 
-            <!-- Pasos (se construyen desde código) -->
-            <StackPanel x:Name="spSteps" Grid.Row="1" Margin="0,14,0,0" />
-
-            <!-- Indicador de botón -->
-            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,4,0,0">
+            <!-- ══ Cabina en vivo: mando + estado + acciones ══ -->
+            <Border Grid.Row="1" Style="{StaticResource CardHero}">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="28" />
+                        <ColumnDefinition Width="300" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Width="64" Height="64" CornerRadius="16" Background="{StaticResource SurfaceHiBrush}">
-                        <TextBlock x:Name="lblLastButton" Text="–" FontSize="30" FontWeight="Bold"
-                                   Foreground="{StaticResource LilacBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource H2}" Text="Último botón" />
-                        <TextBlock x:Name="lblCount" Style="{StaticResource Muted}" Text="Aún no se ha pulsado ningún botón." />
+
+                    <!-- Mando en vivo -->
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <c:ClickDeck x:Name="deck" Height="244" HorizontalAlignment="Center" />
+                        <TextBlock Style="{StaticResource Muted}" FontSize="11.5" HorizontalAlignment="Center" Margin="0,12,0,0"
+                                   Text="Pruébalo: cada botón se ilumina al pulsarlo." />
+                    </StackPanel>
+
+                    <!-- Estado + acciones -->
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Right" Style="{StaticResource ChipMuted}" Padding="10,5" VerticalAlignment="Center">
+                                <TextBlock x:Name="lblStep" Style="{StaticResource Muted}" FontSize="11" Text="Listo para empezar" />
+                            </Border>
+                            <TextBlock Style="{StaticResource H2}" VerticalAlignment="Center" Text="En vivo" />
+                        </DockPanel>
+                        <ProgressBar x:Name="prog" Height="7" Minimum="0" Maximum="6" Value="0" Margin="0,12,0,0"
+                                     Background="{StaticResource SurfaceHiBrush}" Foreground="{StaticResource PrimaryBrush}"
+                                     BorderThickness="0" />
+
+                        <!-- Último botón -->
+                        <Border Style="{StaticResource Tile}" Margin="0,16,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="54" Height="54" CornerRadius="15" Background="{StaticResource SurfaceHiBrush}">
+                                    <TextBlock x:Name="lblLastButton" Text="–" FontSize="26" FontWeight="Bold"
+                                               Foreground="{StaticResource LilacBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="13,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource TileLabel}" Text="ÚLTIMO BOTÓN" />
+                                    <TextBlock x:Name="lblCount" Style="{StaticResource Body}" FontSize="12.5"
+                                               Text="Aún no se ha pulsado ninguno." />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Button x:Name="btnRide" Style="{StaticResource PrimaryButtonLarge}" IsDefault="True"
+                                HorizontalAlignment="Stretch" Margin="0,16,0,0" Content="🚴  Empezar a rodar" Click="Ride_Click" />
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="10" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="btnStart" Grid.Column="0" Style="{StaticResource GhostButton}" Padding="10,11" Content="Solo conectar" Click="Start_Click" />
+                            <Button x:Name="btnStop" Grid.Column="2" Style="{StaticResource GhostButton}" Padding="10,11" Content="Detener" IsEnabled="False" Click="Stop_Click" />
+                        </Grid>
+                        <TextBlock x:Name="lblStatus" Style="{StaticResource Body}" FontSize="12.5" Margin="2,14,0,0"
+                                   Foreground="{StaticResource LilacSoftBrush}" Text="Listo para conectar." />
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- Calibración de botones -->
-            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,12,0,0" VerticalAlignment="Top">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource FieldLabel}" Text="BOTONES" />
-                    <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,2,0,10"
-                               Text="Tus botones ya funcionan al conectar (precalibrados para el Click V2). Solo usa la calibración si alguno no responde o si tu mando es distinto." />
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                        <Button x:Name="btnAutoCal" Style="{StaticResource PrimaryButton}" Padding="15,9"
-                                Content="✨ Calibración automática" IsEnabled="False" Click="AutoCal_Click" />
-                        <Button x:Name="btnCopyLog" Style="{StaticResource GhostButton}" Padding="15,9" Margin="8,0,0,0"
-                                Content="Copiar registro" Click="CopyLog_Click" />
-                    </StackPanel>
-                    <StackPanel x:Name="spActions" Margin="0,10,0,0" />
-                </StackPanel>
-            </Border>
+            <!-- ══ Cuerpo: formulario (izq) + panel en vivo (der) ══ -->
+            <Grid Grid.Row="2" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="446" />
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <!-- Registro -->
-            <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource FieldLabel}" Text="REGISTRO" />
-                    <ScrollViewer x:Name="scLog" VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="spLog" />
-                    </ScrollViewer>
-                </DockPanel>
-            </Border>
+                <!-- Formulario -->
+                <StackPanel Grid.Column="0">
+                    <!-- Tu cuenta -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <CheckBox x:Name="chkUseAccount" Margin="0,0,0,3"
+                                      Content="Usar mi cuenta Zwift (modo V2 · telemetría)" />
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11" Margin="2,4,0,12"
+                                       Text="Por defecto, Violeta lee los botones SIN cuenta (modo V1, recomendado). Marca esto solo si quieres el modo V2 con tu cuenta Zwift." />
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="CÓMO QUIERES ENTRAR (modo V2)" />
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <RadioButton x:Name="rbUserPass" IsChecked="True" Content="Mi cuenta" Margin="0,0,18,0" Checked="Mode_Changed" />
+                                <RadioButton x:Name="rbToken" Content="Token" Margin="0,0,18,0" Checked="Mode_Changed" />
+                                <RadioButton x:Name="rbDiag" Content="Solo probar" Checked="Mode_Changed" />
+                            </StackPanel>
+
+                            <!-- Usuario + contraseña -->
+                            <StackPanel x:Name="pnlUserPass" Margin="0,18,0,0">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="CORREO DE TU CUENTA" />
+                                <TextBox x:Name="txtUser" />
+                                <TextBlock Style="{StaticResource FieldLabel}" Margin="2,16,0,6" Text="CONTRASEÑA" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <PasswordBox x:Name="pwd" Grid.Column="0" />
+                                    <TextBox x:Name="txtPwdVisible" Grid.Column="0" Visibility="Collapsed" />
+                                    <Button x:Name="btnReveal" Grid.Column="1" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Padding="13,10" Content="👁" Click="Reveal_Click"
+                                            ToolTip="Mostrar / ocultar la contraseña" />
+                                </Grid>
+                                <CheckBox x:Name="chkRememberEmail" Margin="2,14,0,0" Content="Recordar mi correo" />
+                            </StackPanel>
+
+                            <!-- Token -->
+                            <StackPanel x:Name="pnlToken" Margin="0,18,0,0" Visibility="Collapsed">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="TOKEN" />
+                                <TextBox x:Name="txtToken" />
+                                <CheckBox x:Name="chkAccess" Margin="2,10,0,0"
+                                          Content="Es un access token ya válido (si no, se trata como refresh)" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="2,16,0,0">
+                                <TextBlock Text="🔒" FontSize="13" VerticalAlignment="Top" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="7,0,0,0" MaxWidth="350"
+                                           Text="Tus credenciales solo viven en memoria para iniciar sesión. Nunca se guardan ni se comparten." />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Botones del mando -->
+                    <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="QUÉ HACEN LOS BOTONES DEL MANDO" />
+                            <ComboBox x:Name="cmbMapping" Margin="0,2,0,0" SelectionChanged="Preset_Changed" />
+                            <TextBlock x:Name="lblPresetDesc" Style="{StaticResource Muted}" FontSize="11.5" Margin="2,8,0,0" />
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="2,8,0,0"
+                                       Foreground="{StaticResource SuccessBrush}"
+                                       Text="✓ Tus botones ya vienen configurados para el Click V2: no hace falta calibrar." />
+                            <CheckBox x:Name="chkSwap" Margin="2,14,0,0"
+                                      Content="Invertir + y −  (si las marchas salen al revés)" />
+                            <CheckBox x:Name="chkAutoCal" Margin="2,12,0,0"
+                                      Content="Recalibrar mis botones al conectar (normalmente no hace falta)" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Opciones avanzadas -->
+                    <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                        <Expander Header="Opciones avanzadas">
+                            <StackPanel Margin="0,12,0,0">
+                                <TextBlock Style="{StaticResource FieldLabel}" Text="NOMBRE BLUETOOTH DEL MANDO" />
+                                <TextBox x:Name="txtDevice" Text="Zwift" />
+                                <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="2,6,0,0"
+                                           Text="Buscamos cualquier mando cuyo nombre contenga este texto. «Zwift» reconoce Click, Play y Ride." />
+                                <CheckBox x:Name="chkKeyboard" Margin="2,14,0,0" IsChecked="True"
+                                          Content="Emular teclado (recomendado)" />
+
+                                <TextBlock Style="{StaticResource FieldLabel}" Margin="2,18,0,6" Text="RUTA DE MYWHOOSH (PARA «EMPEZAR A RODAR»)" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="txtMyWhooshPath" Grid.Column="0" />
+                                    <Button x:Name="btnBrowseMyWhoosh" Grid.Column="1" Style="{StaticResource GhostButton}"
+                                            Margin="8,0,0,0" Padding="14,8" Content="Examinar…" Click="BrowseMyWhoosh_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </Expander>
+                    </Border>
+                </StackPanel>
+
+                <!-- Panel en vivo -->
+                <StackPanel Grid.Column="2">
+                    <!-- Pasos -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="QUÉ ESTÁ PASANDO" />
+                            <StackPanel x:Name="spSteps" Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Calibración -->
+                    <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource FieldLabel}" Text="BOTONES" />
+                            <TextBlock Style="{StaticResource Muted}" FontSize="11.5" Margin="0,2,0,10"
+                                       Text="Tus botones ya funcionan al conectar (precalibrados para el Click V2). Solo usa la calibración si alguno no responde o si tu mando es distinto." />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <Button x:Name="btnAutoCal" Style="{StaticResource PrimaryButton}" Padding="15,9"
+                                        Content="✨ Calibración automática" IsEnabled="False" Click="AutoCal_Click" />
+                                <Button x:Name="btnCopyLog" Style="{StaticResource GhostButton}" Padding="15,9" Margin="8,0,0,0"
+                                        Content="Copiar registro" Click="CopyLog_Click" />
+                            </StackPanel>
+                            <StackPanel x:Name="spActions" Margin="0,10,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Registro -->
+                    <Border Style="{StaticResource Card}" Margin="0,14,0,0" Height="220">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource FieldLabel}" Text="REGISTRO" />
+                            <ScrollViewer x:Name="scLog" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">
+                                <StackPanel x:Name="spLog" />
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
         </Grid>
-    </Grid>
+    </ScrollViewer>
 </UserControl>

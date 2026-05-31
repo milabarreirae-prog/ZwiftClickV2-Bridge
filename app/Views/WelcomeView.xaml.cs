@@ -21,8 +21,16 @@ public partial class WelcomeView : UserControl
     {
         InitializeComponent();
         AppState.Current.Changed += OnStateChanged;
+        AppState.Current.ButtonFlashed += OnButtonFlashed;
         Loaded += (_, _) => Refresh();
     }
+
+    /// <summary>Una pulsación real (desde la pantalla Conectar): ilumina el mando en vivo del Inicio.</summary>
+    private void OnButtonFlashed(string? actionId, byte vk) => Dispatcher.Invoke(() =>
+    {
+        if (!string.IsNullOrEmpty(actionId)) deck.Flash(actionId);
+        else deck.FlashByKey(vk);
+    });
 
     private Brush B(string key) => (Brush)FindResource(key);
 
@@ -97,23 +105,39 @@ public partial class WelcomeView : UserControl
             case MandoStatus.Connecting:
                 ring.Stroke = B("LilacBrush");
                 statusDot.Fill = B("LilacBrush");
+                ringGlow.Opacity = 0;
                 lblStatusTitle.Text = "Conectando…";
                 lblStatusSub.Text = "Estamos hablando con tu mando.";
+                liveDot.Fill = B("LilacBrush");
+                lblLive.Text = "conectando…";
+                deck.StopDemo();
+                deck.SetPowered(true);
                 StartPulse();
                 break;
             case MandoStatus.Connected:
                 ring.Stroke = B("SuccessBrush");
                 statusDot.Fill = B("SuccessBrush");
+                ringGlow.Opacity = 1;
                 lblStatusTitle.Text = "¡Mando conectado!";
                 lblStatusSub.Text = string.IsNullOrWhiteSpace(AppState.Current.DeviceName)
                     ? "Listo para rodar."
                     : $"{AppState.Current.DeviceName} · listo para rodar.";
+                liveDot.Fill = B("SuccessBrush");
+                lblLive.Text = "en vivo";
+                deck.StopDemo();
+                deck.SetPowered(true);
+                StartPulse();
                 break;
             default:
                 ring.Stroke = B("StrokeBrush");
                 statusDot.Fill = B("TextMutedBrush");
+                ringGlow.Opacity = 0;
                 lblStatusTitle.Text = "Mando desconectado";
                 lblStatusSub.Text = "Conéctalo para empezar a rodar.";
+                liveDot.Fill = B("LilacBrush");
+                lblLive.Text = "demo";
+                deck.SetPowered(false);
+                deck.StartDemo();
                 break;
         }
     }

@@ -339,6 +339,7 @@ public partial class ConnectView : UserControl
         lblLastButton.Text = "–";
         lblLastButton.Foreground = B("LilacBrush");
         lblCount.Text = "Aún no se ha pulsado ningún botón.";
+        deck.SetPowered(true);   // el mando "despierta" mientras conecta
 
         btnRide.IsEnabled = false;
         btnStart.IsEnabled = false;
@@ -448,6 +449,7 @@ public partial class ConnectView : UserControl
     {
         _runner?.Stop();
         _operational = false;
+        deck.SetPowered(false);
         btnRide.IsEnabled = true;
         btnStart.IsEnabled = true;
         btnStop.IsEnabled = false;
@@ -483,6 +485,7 @@ public partial class ConnectView : UserControl
         if (p.IsError)
         {
             _operational = false;
+            deck.SetPowered(false);
             btnRide.IsEnabled = true;
             btnStart.IsEnabled = true;
             btnStop.IsEnabled = false;
@@ -501,7 +504,12 @@ public partial class ConnectView : UserControl
             : "•";
         lblLastButton.Text = symbol;
         lblLastButton.Foreground = B("BloomBrush");
-        lblCount.Text = $"Botón {b.Label} · {_buttonCount} pulsación(es)";
+        lblCount.Text = $"{b.Label} · {_buttonCount} pulsación(es)";
+
+        // Ilumina la pieza pulsada en el mando en vivo (aquí y también en Inicio).
+        if (!string.IsNullOrEmpty(b.ActionId)) deck.Flash(b.ActionId);
+        else deck.FlashByKey(b.VirtualKey);
+        AppState.Current.RaiseButton(b.ActionId, b.VirtualKey);
     }
 
     private void OnDiagnosticFrame(string line)
@@ -523,6 +531,7 @@ public partial class ConnectView : UserControl
         if (ok)
         {
             _operational = true;
+            deck.SetPowered(true);
             btnRide.IsEnabled = false;
             btnStart.IsEnabled = false;
             btnStop.IsEnabled = true;
@@ -551,6 +560,7 @@ public partial class ConnectView : UserControl
         else
         {
             _operational = false;
+            deck.SetPowered(false);
             btnRide.IsEnabled = true;
             btnStart.IsEnabled = true;
             btnStop.IsEnabled = false;

@@ -34,6 +34,15 @@ public sealed class AppState
 
     public event Action? Changed;
 
+    /// <summary>
+    /// Una pulsación de botón ocurrió (acciónId, teclaVirtual). La emite la pantalla Conectar (que
+    /// maneja el puente) y la escucha Inicio para iluminar su mando en vivo también.
+    /// </summary>
+    public event Action<string?, byte>? ButtonFlashed;
+
     /// <summary>Notifica un cambio (p. ej. tras actualizar varias propiedades a la vez).</summary>
     public void Raise() => Changed?.Invoke();
+
+    /// <summary>Difunde una pulsación de botón a quien la escuche (p. ej. el mando en vivo de Inicio).</summary>
+    public void RaiseButton(string? actionId, byte virtualKey) => ButtonFlashed?.Invoke(actionId, virtualKey);
 }
