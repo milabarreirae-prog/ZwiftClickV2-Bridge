@@ -15,7 +15,11 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _welcome.NavigateRequested += Navigate;
+        _welcome.RideRequested += () => { Navigate("connect"); _connect.StartRide(); };
         Navigate("home");
+
+        // Guardar las preferencias (sin secretos) al cerrar la app.
+        Closing += (_, _) => _connect.PersistSettings();
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)
@@ -43,6 +47,9 @@ public partial class MainWindow : Window
             "about" => _about,
             _ => _welcome
         };
+
+        if (target is not ("tutorial" or "connect" or "about"))
+            _welcome.Refresh(); // repintar el panel vivo con las últimas preferencias/estado
 
         btnHome.Tag = target == "home" ? "active" : null;
         btnTutorial.Tag = target == "tutorial" ? "active" : null;

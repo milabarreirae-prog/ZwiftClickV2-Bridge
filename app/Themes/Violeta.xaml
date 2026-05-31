@@ -271,4 +271,71 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
+    <!-- ════════════════════════════════════════════════════════════════════
+         NUEVOS ESTILOS DEL REDISEÑO (panel vivo + asistente)
+         ════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Color de superficie elevada extra (tiles del panel). -->
+    <SolidColorBrush x:Key="TileBrush" Color="#21163A" />
+
+    <!-- Tarjeta destacada (héroe del estado): un punto más clara y con borde lila tenue. -->
+    <Style x:Key="CardHero" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="#5A3F8C" />
+        <Setter Property="Padding" Value="24" />
+        <Setter Property="CornerRadius" Value="18" />
+    </Style>
+
+    <!-- Tile de métrica: etiqueta pequeña arriba, dato grande abajo. -->
+    <Style x:Key="Tile" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource TileBrush}" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="14,12" />
+    </Style>
+
+    <!-- Etiqueta de tile (kicker). -->
+    <Style x:Key="TileLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}" />
+        <Setter Property="FontSize" Value="11.5" />
+    </Style>
+    <Style x:Key="TileValue" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- Chip (píldora) para botones calibrados / etiquetas. -->
+    <Style x:Key="Chip" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource SurfaceHiBrush}" />
+        <Setter Property="CornerRadius" Value="9" />
+        <Setter Property="Padding" Value="11,7" />
+        <Setter Property="Margin" Value="0,0,8,8" />
+    </Style>
+    <Style x:Key="ChipMuted" TargetType="Border" BasedOn="{StaticResource Chip}">
+        <Setter Property="Background" Value="{StaticResource TileBrush}" />
+    </Style>
+
+    <!-- Botón primario GRANDE (CTA protagonista del panel y del asistente). -->
+    <Style x:Key="PrimaryButtonLarge" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+        <Setter Property="FontSize" Value="16.5" />
+        <Setter Property="Padding" Value="26,15" />
+    </Style>
+
+    <!-- Animación de pulso reutilizable: aplicar a cualquier elemento para que "respire". -->
+    <Style x:Key="Pulse" TargetType="FrameworkElement">
+        <Style.Triggers>
+            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                <BeginStoryboard>
+                    <Storyboard>
+                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                         From="1" To="0.35" Duration="0:0:0.95"
+                                         AutoReverse="True" RepeatBehavior="Forever" />
+                    </Storyboard>
+                </BeginStoryboard>
+            </EventTrigger>
+        </Style.Triggers>
+    </Style>
+
 </ResourceDictionary>

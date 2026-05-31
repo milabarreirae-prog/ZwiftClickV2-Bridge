@@ -34,11 +34,20 @@ public sealed class ZwiftClickBridge : IDisposable
     private readonly StructuredLogger _logger = new();
     private readonly bool _emulateKeyboard;
 
-    // Mapeo de los dos botones del mando a teclas. Por defecto: cambio de marcha de MyWoosh
-    // (+ = subir = tecla I, − = bajar = tecla K). Configurable desde la interfaz.
-    // _keyPlus se asocia al botón "derecha/+" del protocolo; _keyMinus al "izquierda/−".
-    private byte _keyMinus = KeyboardEmulator.VK_K;
-    private byte _keyPlus = KeyboardEmulator.VK_I;
+    // Mapeo de botones del mando a teclas, indexado por un identificador estable de acción
+    // ("plus", "minus", "left", "right", "emote_peace", …). Por defecto: cambio de marcha de
+    // MyWhoosh (+ = subir = tecla I, − = bajar = tecla K). Configurable desde la interfaz.
+    // El modelo es genérico: cualquier preset puede definir N acciones, cada una con su tecla.
+    private readonly Dictionary<string, byte> _actionKeys = new()
+    {
+        ["minus"] = KeyboardEmulator.VK_K,
+        ["plus"] = KeyboardEmulator.VK_I,
+    };
+    private readonly Dictionary<string, string> _actionLabels = new()
+    {
+        ["minus"] = "− (bajar)",
+        ["plus"] = "+ (subir)",
+    };
 
     private ECDiffieHellman? _ourKey;
     private byte[]? _ourPubKey65;
@@ -69,8 +78,21 @@ public sealed class ZwiftClickBridge : IDisposable
     /// </summary>
     public void SetKeyMapping(byte minusKey, byte plusKey)
     {
-        _keyMinus = minusKey;
-        _keyPlus = plusKey;
+        _actionKeys["minus"] = minusKey;
+        _actionKeys["plus"] = plusKey;
+    }
+
+    /// <summary>
+    /// Reemplaza por completo el conjunto de acciones asignables: <paramref name="keys"/> mapea
+    /// cada identificador de acción a su tecla virtual, y <paramref name="labels"/> a su etiqueta
+    /// humana. Permite presets con cualquier número de botones (marchas, dirección, emotes, UI…).
+    /// </summary>
+    public void SetActions(IReadOnlyDictionary<string, byte> keys, IReadOnlyDictionary<string, string> labels)
+    {
+        _actionKeys.Clear();
+        foreach (var kv in keys) _actionKeys[kv.Key] = kv.Value;
+        _actionLabels.Clear();
+        foreach (var kv in labels) _actionLabels[kv.Key] = kv.Value;
     }
 
     /// <summary>
@@ -92,16 +114,51 @@ public sealed class ZwiftClickBridge : IDisposable
     /// <summary>Resultado de una calibración: (acción, firma asignada, éxito).</summary>
     public event Action<string, string, bool>? CalibrationFinished;
 
+    /// <summary>Empieza un paso de calibración (manual o guiada): el identificador de la acción a pulsar.</summary>
+    public event Action<string>? CalibrationStepStarted;
+
+    /// <summary>Termina la calibración guiada (recorrió todas las acciones de la cola).</summary>
+    public event Action? GuidedCalibrationFinished;
+
     private int _postUnlockFrameCount;
 
     // Estado del aprendiz de botones.
     private readonly Dictionary<string, int> _sigBaseline = new();    // firma → veces vista en reposo
-    private readonly Dictionary<string, string> _sigToAction = new(); // firma → "plus"/"minus"
-    private string? _lastEmittedSig;
+    private readonly Dictionary<string, string> _sigToAction = new(); // firma calibrada → acción (override)
+    private string? _runSig;     // firma de la racha en curso
+    private int _runCount;       // longitud de la racha (distingue ráfaga de pulsación vs keepalive)
     private string? _calAction;
+
+    // Umbral de ráfaga para emitir: ESTÁNDAR para TODOS los botones. Una pulsación real llega como
+    // una ráfaga de ≥5 tramas IDÉNTICAS seguidas, sin interrupción de otro mensaje; el keepalive de
+    // reposo llega aislado. Solo emitimos al cruzar este umbral, una sola vez por ráfaga. Cualquier
+    // mensaje intermedio distinto reinicia la racha (ver _runSig/_runCount en OnControllerFrame).
+    private const int EmitBurstThreshold = 5;
+
+    // Perfil por defecto del Zwift Click V2 (firmas reales observadas en hardware, ver docs/BUTTON_MAP.md).
+    // Permite que los botones funcionen SIN calibrar. La calibración del usuario tiene prioridad.
+    // Coincidencia por PREFIJO; el orden importa (la firma más específica primero).
+    private static readonly (string Prefix, string Action)[] ClickV2Profile =
+    {
+        ("08001064180020", "minus"), // botón − (bajar marcha)
+        ("0810",           "plus"),  // botones + (subir marcha)
+    };
+
+    // Handshake CORTO "RideOn" + 02 03 (8B, sin pubkey) del protocolo V1/andriuz. Tras él + 000800/000810
+    // el Click V2 (compatible con V1) emite los botones EN CLARO por CH02 como bitmask. Ref: andriuz29.
+    private static readonly byte[] RideOnShort = { 0x52, 0x69, 0x64, 0x65, 0x4F, 0x6E, 0x02, 0x03 };
     private readonly Dictionary<string, int> _calCounts = new();
     private System.Threading.Timer? _calTimer;
     private readonly object _calLock = new();
+
+    // Calibración guiada (automática): cola de acciones que se calibran una tras otra.
+    private Queue<string>? _guidedQueue;
+    private const int CalWindowMs = 5000;     // ventana de captura por acción
+    private const int GuidedGapMs = 700;      // respiro entre pasos guiados
+    private const int GuidedPrerollMs = 2500; // aprendizaje de baseline antes del primer paso
+    // Una pulsación real emite una ráfaga (~10 tramas); el keepalive ~1/s ≈ 5 en la ventana. Si una
+    // firma también aparece en reposo, exigimos superar este umbral para aceptarla como botón.
+    private const int CalBurstThreshold = 8;
 
     private void Report(BridgePhase phase, string message, bool isError = false)
         => ProgressChanged?.Invoke(new BridgeProgress(phase, message, isError));
@@ -262,13 +319,10 @@ public sealed class ZwiftClickBridge : IDisposable
         _unlocked = true;
 
         // Pre-sembrar el keepalive puro como baseline con cuenta alta: nunca se elegirá en calibración
-        // aunque ésta comience antes de haber acumulado observaciones en reposo.
+        // aunque ésta comience antes de haber acumulado observaciones en reposo. "080010" es la trama
+        // de reposo/heartbeat del Click V2 (confirmado en hardware).
         // NOTA: 08001064180020 NO se pre-siembra porque aparece tanto como keepalive como botón −;
-        // el aprendiz de baseline lo classifica correctamente con las primeras observaciones reales.
-        _sigBaseline["080010"] = 999;
-
-        // Pre-sembrar el keepalive como baseline conocido para que la calibración nunca lo elija.
-        // "080010" es la trama de reposo/heartbeat del Click V2 (confirmado en hardware).
+        // el aprendiz de baseline lo clasifica correctamente con las primeras observaciones reales.
         _sigBaseline["080010"] = 999;
 
         Console.WriteLine($"\n✅ UNLOCK COMPLETO ({sw.ElapsedMilliseconds}ms). Escuchando botones en CH02…");
@@ -289,6 +343,145 @@ public sealed class ZwiftClickBridge : IDisposable
         byte[] payload = ZapCommands.BuildHandshake(ZapCommands.V2Prefix, _ourPubKey65);
         _ = _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, payload);
         _logger.Log("handshake_tx", "tx", "CH03", payload, "RideOn 02 03 + pubkey64");
+    }
+
+    /// <summary>
+    /// MODO V1 / andriuz (POR DEFECTO): conexión EN CLARO, SIN ECDH, SIN unlock de servidor y SIN
+    /// cuenta Zwift. El Click V2 es compatible con el protocolo del Click V1: tras un RideOn corto y
+    /// las escrituras de habilitación 000800/000810 en CH03, el mando emite los botones EN CLARO por
+    /// CH02 como bitmask `23 08 B0 B1 B2 B3 0F` (activo-bajo: bit en 0 = botón pulsado). Decodificación
+    /// determinista, sin calibración. Refs: andriuz29 · docs/EXTERNAL_BUTTON_MAP_RESEARCH.md.
+    /// No toca el flujo de unlock V2 (StartAsync), que sigue disponible como modo alterno.
+    /// </summary>
+    public async Task<bool> StartAndriuzAsync(string deviceName)
+    {
+        Report(BridgePhase.Scanning, "Buscando tu mando por Bluetooth… enciéndelo o pulsa un botón.");
+        var seenDevices = new List<string>();
+        var device = await _ble.ConnectAsync(deviceName, onNewDeviceSeen: name =>
+        {
+            lock (seenDevices) seenDevices.Add(name);
+            Report(BridgePhase.Scanning, $"📡 Veo cerca: «{name}»");
+        });
+        if (device == null)
+        {
+            Report(BridgePhase.Failed,
+                $"No encontré un mando cuyo nombre contenga «{deviceName}». Pulsa un botón para despertarlo y reintenta.", true);
+            return false;
+        }
+        Report(BridgePhase.Connecting, "Mando encontrado. Abriendo el canal…");
+
+        var zap = await _ble.FindZapCharacteristicsAsync(onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
+        if (zap == null)
+        {
+            Report(BridgePhase.Connecting, "No vi el canal de control; intento emparejar con Windows y reintento…");
+            await _ble.EnsurePairedAsync(onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
+            zap = await _ble.FindZapCharacteristicsAsync(onDiagnostic: msg => Report(BridgePhase.Connecting, msg));
+        }
+        if (zap == null)
+        {
+            Report(BridgePhase.Failed,
+                "El mando se conectó pero no pude localizar su canal de control (CH02/CH03). Apaga y enciende el Bluetooth y reintenta.", true);
+            return false;
+        }
+
+        _writer.RegisterCharacteristic(BleDeviceManager.CH03_UUID, zap.Ch03);
+        _ble.ConnectionChanged += connected =>
+        {
+            if (!connected)
+                Report(BridgePhase.Failed, "⚠️ El mando se desconectó del Bluetooth. Acércalo al PC, mantenlo despierto y reconecta.", true);
+        };
+
+        // Suscribir CH02 (botones). Por diagnóstico, también las CH02 extra, CH04 y CH100/101/102.
+        await _listener.SubscribeAsync(BleDeviceManager.CH02_UUID, zap.Ch02, OnAndriuzFrame);
+        Report(BridgePhase.Connecting, $"Suscripción CH02 (botones): props {BleNotificationListener.DescribeProps(zap.Ch02)}");
+        foreach (var ch02 in zap.Ch02All)
+            if (ch02.AttributeHandle != zap.Ch02.AttributeHandle)
+                await _listener.SubscribeAsync(BleDeviceManager.CH02_UUID, ch02, OnAndriuzFrame);
+        if (zap.Ch04 != null)
+            await _listener.SubscribeAsync(BleDeviceManager.CH04_UUID, zap.Ch04, OnAndriuzFrame, useIndicate: true);
+        foreach (var uuid in new[] { BleDeviceManager.CH100_UUID, BleDeviceManager.CH101_UUID, BleDeviceManager.CH102_UUID })
+            if (zap.All.TryGetValue(uuid, out var extra))
+                await _listener.SubscribeAsync(uuid, extra, OnAndriuzFrame);
+
+        // Handshake CORTO (sin pubkey) + habilitación EN CLARO. NO se desbloquea ni se cifra nada.
+        Report(BridgePhase.Handshake, "Saludo V1 en claro y habilitando los botones…");
+        await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, RideOnShort);
+        _logger.Log("handshake_tx", "tx", "CH03", RideOnShort, "RideOn 02 03 (corto, V1)");
+        await Task.Delay(250);
+        foreach (byte[] cmd in new[] { new byte[] { 0x00, 0x08, 0x00 }, new byte[] { 0x00, 0x08, 0x10 } })
+        {
+            await _writer.WriteRawAsync(BleDeviceManager.CH03_UUID, cmd);
+            _logger.Log("enable_tx", "tx", "CH03", cmd, "habilitar botones (V1)");
+            await Task.Delay(80);
+        }
+
+        _unlocked = true; // operativo: ya escuchamos botones (en V1 no hay unlock real)
+        Console.WriteLine("\n✅ MODO V1 listo. Escuchando botones en claro (bitmask 2308…0F) en CH02…");
+        Report(BridgePhase.Listening,
+            "¡Listo! Modo sin cuenta. Pulsa los botones del mando: las marchas deberían moverse en MyWhoosh.");
+        return true;
+    }
+
+    /// <summary>
+    /// Mapa bit→acción del bitmask del Click V1/V2 (trama 23 08 B0 B1 B2 B3 0F, activo-bajo). El índice
+    /// es el byte B0..B3 del bitmask. LOS 10 BOTONES CONFIRMADOS EN HARDWARE (Zwift Click V2, 2026-05-30,
+    /// por orden de pulsación en el log de sesión). Mando izquierdo: d-pad + shifters. Mando derecho: a/b/y/z.
+    /// </summary>
+    private static readonly (int ByteIdx, byte Mask, string Action)[] AndriuzButtons =
+    {
+        // Mando IZQUIERDO
+        (0, 0x01, "left"),     // ←
+        (0, 0x02, "nav_up"),   // ↑
+        (0, 0x04, "right"),    // →
+        (0, 0x08, "nav_down"), // ↓
+        (1, 0x02, "plus"),     // +  (corregido: + y − estaban invertidos)
+        (1, 0x20, "minus"),    // −
+        // Mando DERECHO (a/b/y/z, por orden de pulsación confirmado en hardware)
+        (0, 0x20, "btn_a"),    // a
+        (0, 0x10, "btn_b"),    // b
+        (0, 0x40, "btn_x"),    // y
+        (1, 0x01, "btn_y"),    // z
+    };
+    private readonly byte[] _prevMask = { 0xFF, 0xFF, 0xFF, 0xFF }; // reposo = todos los bits en 1
+
+    /// <summary>Trama recibida en modo V1: decodifica el bitmask de botones o la vuelca al diagnóstico.</summary>
+    private void OnAndriuzFrame(byte[] data)
+    {
+        _postUnlockFrameCount++;
+        _logger.Log("andriuz_rx", "rx", "CH02", data, "raw");
+        if (data.Length == 0) return;
+
+        // Bitmask de botones: 23 08 B0 B1 B2 B3 0F. Activo-bajo: cada bit en 0 = botón pulsado.
+        if (data.Length >= 6 && data[0] == 0x23 && data[1] == 0x08)
+        {
+            DecodeButtonBitmask(new[] { data[2], data[3], data[4], data[5] });
+            return;
+        }
+        DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [CH02] {Convert.ToHexString(data)}");
+    }
+
+    /// <summary>Emite una tecla por cada bit que pasa de 1→0 (flanco = botón recién pulsado).</summary>
+    private void DecodeButtonBitmask(byte[] mask)
+    {
+        foreach (var (byteIdx, m, action) in AndriuzButtons)
+        {
+            bool wasDown = (_prevMask[byteIdx] & m) == 0;
+            bool nowDown = (mask[byteIdx] & m) == 0;
+            if (nowDown && !wasDown && _actionKeys.ContainsKey(action))
+                EmitAction(action, $"2308{Convert.ToHexString(mask)}0F");
+        }
+        // Bits pulsados aún sin mapear (los ~4 del mando derecho): ofrecerlos para descubrirlos.
+        for (int bi = 0; bi < 4; bi++)
+            for (int bit = 0; bit < 8; bit++)
+            {
+                byte m = (byte)(1 << bit);
+                bool wasDown = (_prevMask[bi] & m) == 0;
+                bool nowDown = (mask[bi] & m) == 0;
+                bool known = AndriuzButtons.Any(b => b.ByteIdx == bi && b.Mask == m);
+                if (nowDown && !wasDown && !known)
+                    DiagnosticFrame?.Invoke($"🆕 botón sin mapear: B{bi} bit 0x{m:X2} — dime cuál es físicamente y lo añado");
+            }
+        Array.Copy(mask, _prevMask, 4);
     }
 
     private void OnCh02Frame(byte[] data)
@@ -423,13 +616,54 @@ public sealed class ZwiftClickBridge : IDisposable
 
     public bool IsCalibrating { get { lock (_calLock) return _calAction != null; } }
 
-    /// <summary>Inicia 5s de calibración: el usuario pulsa el botón a asignar a <paramref name="action"/> ("plus"/"minus").</summary>
+    /// <summary>true mientras una calibración guiada (automática) recorre la cola de acciones.</summary>
+    public bool IsGuiding { get { lock (_calLock) return _guidedQueue != null; } }
+
+    /// <summary>Etiqueta humana de una acción (su nombre en el preset, o el propio id si no hay).</summary>
+    private string LabelOf(string action) => _actionLabels.TryGetValue(action, out var l) ? l : action;
+
+    /// <summary>Inicia una ventana de calibración: el usuario pulsa el botón a asignar a <paramref name="action"/>.</summary>
     public void StartCalibration(string action)
     {
         lock (_calLock) { _calAction = action; _calCounts.Clear(); }
-        Report(BridgePhase.Listening, $"Calibrando: pulsa AHORA, varias veces, el botón para «{(action == "plus" ? "SUBIR (+)" : "BAJAR (−)")}» (5 s)…");
+        CalibrationStepStarted?.Invoke(action);
+        Report(BridgePhase.Listening, $"Calibrando: pulsa AHORA, varias veces, el botón para «{LabelOf(action)}» ({CalWindowMs / 1000} s)…");
         _calTimer?.Dispose();
-        _calTimer = new System.Threading.Timer(_ => FinishCalibration(), null, 5000, System.Threading.Timeout.Infinite);
+        _calTimer = new System.Threading.Timer(_ => FinishCalibration(), null, CalWindowMs, System.Threading.Timeout.Infinite);
+    }
+
+    /// <summary>
+    /// Calibración automática guiada: recorre <paramref name="actions"/> una a una, pidiendo cada
+    /// botón y avanzando sola al siguiente. Antes del primer paso observa unos segundos de reposo
+    /// para aprender el keepalive (baseline) y excluirlo. El usuario solo pulsa cada botón al pedírselo.
+    /// </summary>
+    public void StartGuidedCalibration(IEnumerable<string> actions)
+    {
+        var queue = new Queue<string>(actions);
+        if (queue.Count == 0) { GuidedCalibrationFinished?.Invoke(); return; }
+        lock (_calLock) { _guidedQueue = queue; }
+        Report(BridgePhase.Listening, "Calibración automática: aprendiendo el reposo del mando… no pulses nada todavía.");
+        // Pre-roll: deja que OnControllerFrame acumule baseline del keepalive antes de pedir el 1.er botón.
+        _calTimer?.Dispose();
+        _calTimer = new System.Threading.Timer(_ => AdvanceGuided(), null, GuidedPrerollMs, System.Threading.Timeout.Infinite);
+    }
+
+    /// <summary>Termina ya el paso de calibración en curso (sin esperar los 5 s). Útil para «saltar»
+    /// un botón que el mando no tiene; en calibración guiada, avanza al siguiente.</summary>
+    public void SkipCurrentCalibration()
+    {
+        bool active; lock (_calLock) active = _calAction != null;
+        if (!active) return;
+        _calTimer?.Dispose();
+        FinishCalibration();
+    }
+
+    private void AdvanceGuided()
+    {
+        string? next;
+        lock (_calLock) next = _guidedQueue is { Count: > 0 } q ? q.Peek() : null;
+        if (next == null) { lock (_calLock) _guidedQueue = null; GuidedCalibrationFinished?.Invoke(); return; }
+        StartCalibration(next);
     }
 
     private void FinishCalibration()
@@ -441,13 +675,25 @@ public sealed class ZwiftClickBridge : IDisposable
             action = _calAction;
             foreach (var kv in _calCounts)
             {
-                // Excluir keepalive/reposo (baseline con muchas observaciones).
-                bool isIdle = _sigBaseline.TryGetValue(kv.Key, out var bc) && bc >= 3;
-                if (isIdle) continue;
-                // Excluir firmas ya asignadas a OTRA acción (evita solapamiento entre + y −).
-                bool takenByOther = _sigToAction.TryGetValue(kv.Key, out var existingAction) && existingAction != action;
+                string sig = kv.Key; int count = kv.Value;
+
+                // El keepalive PURO (reposo/heartbeat) nunca es un botón.
+                if (sig == "080010") continue;
+
+                // Excluir firmas ya asignadas a OTRA acción (evita solapamiento entre acciones).
+                bool takenByOther = _sigToAction.TryGetValue(sig, out var existingAction) && existingAction != action;
                 if (takenByOther) continue;
-                if (kv.Value > bestCount) { bestCount = kv.Value; best = kv.Key; }
+
+                // Detección por RÁFAGA en vez de por conteo acumulado: algunas firmas (p. ej.
+                // 08001064180020) aparecen TANTO como keepalive (~1/s) COMO ráfaga de botón (~10 por
+                // pulsación). Si la firma también se ve en reposo, exigimos una ráfaga clara para
+                // aceptarla; si no, basta con verla unas pocas veces. Esto arregla el caso en que el
+                // botón «−» no se detectaba porque su firma coincide con un keepalive ambiguo.
+                bool alsoIdle = _sigBaseline.TryGetValue(sig, out var bc) && bc >= 3;
+                int need = alsoIdle ? CalBurstThreshold : 3;
+                if (count < need) continue;
+
+                if (count > bestCount) { bestCount = count; best = sig; }
             }
             if (best != null)
             {
@@ -458,12 +704,42 @@ public sealed class ZwiftClickBridge : IDisposable
             _calAction = null;
         }
         CalibrationFinished?.Invoke(action, best ?? "", best != null);
+
+        // Calibración guiada: descolar la acción recién calibrada y programar la siguiente.
+        bool guided;
+        lock (_calLock)
+        {
+            guided = _guidedQueue is { Count: > 0 } q && q.Peek() == action;
+            if (guided) _guidedQueue!.Dequeue();
+        }
+        if (guided)
+        {
+            _calTimer?.Dispose();
+            _calTimer = new System.Threading.Timer(_ => AdvanceGuided(), null, GuidedGapMs, System.Threading.Timeout.Infinite);
+        }
     }
 
-    /// <summary>Olvida el mapeo aprendido (para recalibrar desde cero).</summary>
+    /// <summary>
+    /// Carga un mapa de botones aprendido en sesiones anteriores (firma → acción). Tiene prioridad
+    /// sobre el perfil por defecto del dispositivo, de modo que lo que el usuario calibró una vez
+    /// sigue funcionando sin volver a calibrar.
+    /// </summary>
+    public void LoadLearnedMap(IReadOnlyDictionary<string, string> map)
+    {
+        lock (_calLock)
+        {
+            foreach (var kv in map)
+                if (!string.IsNullOrEmpty(kv.Key) && !string.IsNullOrEmpty(kv.Value))
+                    _sigToAction[kv.Key] = kv.Value;
+        }
+    }
+
+    /// <summary>Olvida el mapeo aprendido (para recalibrar desde cero) y cancela la calibración guiada.</summary>
     public void ClearCalibration()
     {
-        lock (_calLock) { _sigToAction.Clear(); _sigBaseline.Clear(); }
+        lock (_calLock) { _sigToAction.Clear(); _sigBaseline.Clear(); _calAction = null; _guidedQueue = null; }
+        _calTimer?.Dispose();
+        _sigBaseline["080010"] = 999; // mantener el keepalive conocido pre-sembrado
     }
 
     private void OnControllerFrame(string channel, byte[] data)
@@ -481,34 +757,57 @@ public sealed class ZwiftClickBridge : IDisposable
             }
         }
 
-        // Aprender reposo.
+        // Aprender reposo (informativo/diagnóstico).
         int seen = _sigBaseline[sig] = _sigBaseline.TryGetValue(sig, out var bc2) ? bc2 + 1 : 1;
 
-        // ¿Firma mapeada a una acción? → emitir UNA tecla por ráfaga (en la transición).
-        string? action;
-        lock (_calLock) _sigToAction.TryGetValue(sig, out action);
+        // Racha de la firma actual: una PULSACIÓN llega como ráfaga (~10 tramas seguidas); el keepalive
+        // de reposo llega aislado (intercalado con 080010). Contar la racha nos deja distinguir ambos
+        // SIN calibrar, incluso cuando la firma del botón coincide con un keepalive ambiguo
+        // (p. ej. 08001064180020). Así los botones funcionan «de fábrica».
+        if (sig == _runSig) _runCount++;
+        else { _runSig = sig; _runCount = 1; }
+
+        // El keepalive puro nunca es un botón.
+        if (sig == "080010") return;
+
+        // Resolver acción: primero el mapeo calibrado (override del usuario), luego el perfil por
+        // defecto del dispositivo (Click V2). Permite «listo para rodar» sin calibrar.
+        string? action = ResolveAction(sig);
         if (action != null)
         {
-            if (sig != _lastEmittedSig)
-            {
-                _lastEmittedSig = sig;
+            // Emitir UNA sola vez cuando la racha cruza el umbral (ráfaga real de pulsación),
+            // nunca por un keepalive aislado en reposo.
+            if (_runCount == EmitBurstThreshold)
                 EmitAction(action, sig);
-            }
             return;
         }
 
-        // No mapeada: re-armar (reposo/release) y, si es una firma candidata, ofrecerla para calibrar.
-        _lastEmittedSig = null;
-        bool isIdle = seen >= 3;
-        if (!isIdle && _postUnlockFrameCount > 15)
+        // Firma sin asignar y con pinta de pulsación (ráfaga): ofrecerla para calibrar.
+        if (_runCount == EmitBurstThreshold && _postUnlockFrameCount > 8)
             DiagnosticFrame?.Invoke($"#{_postUnlockFrameCount} [{channel}] botón sin asignar · firma {sig}  (usa «Calibrar» para asignarlo)");
+    }
+
+    /// <summary>
+    /// Resuelve la acción de una firma: primero el mapeo aprendido por calibración (exacto), luego el
+    /// perfil por defecto del Click V2 (por prefijo). Solo devuelve acciones presentes en el preset actual.
+    /// </summary>
+    private string? ResolveAction(string sig)
+    {
+        lock (_calLock)
+            if (_sigToAction.TryGetValue(sig, out var calibrated))
+                return calibrated;
+
+        foreach (var (prefix, act) in ClickV2Profile)
+            if (sig.StartsWith(prefix, StringComparison.Ordinal) && _actionKeys.ContainsKey(act))
+                return act;
+
+        return null;
     }
 
     private void EmitAction(string action, string sig)
     {
-        bool isPlus = action == "plus";
-        byte vk = isPlus ? _keyPlus : _keyMinus;
-        string label = isPlus ? "+ (subir)" : "− (bajar)";
+        byte vk = _actionKeys.TryGetValue(action, out var k) ? k : (byte)0;
+        string label = LabelOf(action);
         if (vk != 0 && _emulateKeyboard)
         {
             _keyboard.SendKeyPress(vk);
@@ -516,7 +815,7 @@ public sealed class ZwiftClickBridge : IDisposable
         }
         if (vk != 0)
         {
-            ButtonEmitted?.Invoke(new BridgeButtonEvent(label, vk));
+            ButtonEmitted?.Invoke(new BridgeButtonEvent(label, vk, action));
             Report(BridgePhase.ButtonPressed, $"Botón {label} → tecla enviada.");
         }
     }

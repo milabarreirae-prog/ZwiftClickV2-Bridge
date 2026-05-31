@@ -13,6 +13,13 @@ public sealed class ZapCharacteristics
     public GattCharacteristic? Ch04 { get; init; }         // SyncTx / Indicate (eco/estado)
     /// <summary>TODAS las características descubiertas, por UUID (incluye CH100/101/102 si existen).</summary>
     public required IReadOnlyDictionary<Guid, GattCharacteristic> All { get; init; }
+
+    // El Click V2 son DOS mandos puenteados → el dispositivo puede exponer DOS instancias del
+    // servicio ZAP (00000001-19CA…), cada una con su propia CH02 (notify) y CH03 (write). En la
+    // captura de la app oficial, la telemetría/batería sale por UNA instancia y los BOTONES por la
+    // OTRA. El deduplicado por UUID (Ch02/Ch03) se queda con la primera; estas listas guardan TODAS.
+    public IReadOnlyList<GattCharacteristic> Ch02All { get; init; } = Array.Empty<GattCharacteristic>();
+    public IReadOnlyList<GattCharacteristic> Ch03All { get; init; } = Array.Empty<GattCharacteristic>();
 }
 
 /// <summary>
@@ -185,6 +192,7 @@ public class BleDeviceManager
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             var allChars = new Dictionary<Guid, GattCharacteristic>();
+            var allInstances = new List<GattCharacteristic>(); // TODAS las instancias (UUIDs repetidos incluidos)
             var serviceUuids = new List<string>();
 
             GattDeviceServicesResult primariesResult;
@@ -212,14 +220,14 @@ public class BleDeviceManager
             foreach (var svc in primariesResult.Services)
             {
                 serviceUuids.Add(Short(svc.Uuid));
-                await CollectCharacteristicsAsync(svc, allChars);
+                await CollectCharacteristicsAsync(svc, allChars, allInstances);
 
                 try
                 {
                     var incl = await svc.GetIncludedServicesAsync(BluetoothCacheMode.Uncached);
                     if (incl.Status == GattCommunicationStatus.Success && incl.Services != null)
                         foreach (var sub in incl.Services)
-                            await CollectCharacteristicsAsync(sub, allChars);
+                            await CollectCharacteristicsAsync(sub, allChars, allInstances);
                 }
                 catch { /* included services es opcional; ignorar */ }
             }
@@ -230,11 +238,16 @@ public class BleDeviceManager
 
             if (ch02 != null && ch03 != null)
             {
-                Console.WriteLine($"   ✅ Características ZAP resueltas (intento {attempt}): CH02+CH03{(ch04 != null ? "+CH04" : "")}.");
+                var ch02All = allInstances.Where(c => c.Uuid == CH02_UUID).ToList();
+                var ch03All = allInstances.Where(c => c.Uuid == CH03_UUID).ToList();
+                string extra = ch02All.Count > 1 || ch03All.Count > 1
+                    ? $" · {ch02All.Count} CH02 / {ch03All.Count} CH03 (mando puenteado)" : "";
+                Console.WriteLine($"   ✅ Características ZAP resueltas (intento {attempt}): CH02+CH03{(ch04 != null ? "+CH04" : "")}{extra}.");
                 return new ZapCharacteristics
                 {
                     Ch02 = ch02, Ch03 = ch03, Ch04 = ch04,
-                    All = new Dictionary<Guid, GattCharacteristic>(allChars)
+                    All = new Dictionary<Guid, GattCharacteristic>(allChars),
+                    Ch02All = ch02All, Ch03All = ch03All
                 };
             }
 
@@ -253,14 +266,18 @@ public class BleDeviceManager
         return null;
     }
 
-    private static async Task CollectCharacteristicsAsync(GattDeviceService svc, Dictionary<Guid, GattCharacteristic> sink)
+    private static async Task CollectCharacteristicsAsync(GattDeviceService svc,
+        Dictionary<Guid, GattCharacteristic> sink, List<GattCharacteristic> allInstances)
     {
         try
         {
             var chars = await svc.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
             if (chars.Status == GattCommunicationStatus.Success && chars.Characteristics != null)
                 foreach (var c in chars.Characteristics)
-                    sink.TryAdd(c.Uuid, c);
+                {
+                    sink.TryAdd(c.Uuid, c);   // primera instancia por UUID (para CH04/CH100/101/102)
+                    allInstances.Add(c);      // TODAS las instancias, incluso UUIDs repetidos entre servicios
+                }
         }
         catch { /* algún servicio puede rechazar la enumeración; ignorar */ }
     }

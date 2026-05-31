@@ -97,9 +97,15 @@ Despierta el Click pulsando un botón cuando aparezca el escaneo. Login: ver [do
 Flags: `--no-keyboard` (no emular teclas), `--legacy-hkdf-info` (probar `info="handshake data"`).
 
 Mapeo de botones por defecto (app **Violeta**): **`+` → `I` (subir marcha)**, **`−` → `K` (bajar
-marcha)**, pensado para el cambio de marcha virtual de apps de ciclismo indoor (en MyWoosh, `I`
-sube y `K` baja). En la app puedes elegir entre *Cambio de marchas*, *Flechas* (`←`/`→`) o
-*Dirección* (`A`/`D`), e **invertir + y −** si salen al revés. (La CLI mantiene flechas por defecto.)
+marcha)**, pensado para el cambio de marcha virtual de apps de ciclismo indoor (en MyWhoosh, `I`
+sube y `K` baja). En la app puedes elegir entre *Cambio de marchas*, *Flechas* (`←`/`→`),
+*Dirección* (`A`/`D`) o **MyWhoosh completo** (marchas + dirección + UI + emotes), e **invertir + y −**
+si salen al revés. (La CLI mantiene flechas por defecto.) Mapa completo en
+[`docs/BUTTON_MAP.md`](docs/BUTTON_MAP.md).
+
+La app recuerda tus preferencias (preset, mando, opciones — **nunca** la contraseña), ofrece
+**calibración automática guiada** de los botones, y un botón **«Empezar a rodar»** que abre MyWhoosh
+y conecta el mando de una sola vez.
 
 ## 📚 Documentación
 

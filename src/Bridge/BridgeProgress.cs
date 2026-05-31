@@ -46,4 +46,5 @@ public sealed record BridgeProgress(BridgePhase Phase, string Message, bool IsEr
 /// </summary>
 /// <param name="Label">Descripción amable, p. ej. "Izquierda".</param>
 /// <param name="VirtualKey">Código de tecla virtual de Windows emulado (0 si ninguno).</param>
-public sealed record BridgeButtonEvent(string Label, byte VirtualKey);
+/// <param name="ActionId">Identificador estable de la acción mapeada (p. ej. "plus", "left", "emote_peace"). Vacío si no aplica.</param>
+public sealed record BridgeButtonEvent(string Label, byte VirtualKey, string ActionId = "");

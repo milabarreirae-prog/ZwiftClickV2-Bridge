@@ -28,6 +28,10 @@ public static class Program
             case "-d":
                 return await RunBridgeAsync(GetDeviceNameArg(args), accessToken: null, emulateKeyboard: false);
 
+            case "--andriuz":
+            case "--v1":
+                return await RunAndriuzAsync(GetDeviceNameArg(args), emulateKeyboard: HasFlag(args, "--keyboard"));
+
             case "--unlock":
             case "--bridge":
             case "-b":
@@ -95,6 +99,46 @@ public static class Program
     }
 
     /// <summary>
+    /// Modo V1/andriuz headless (diagnóstico): conecta EN CLARO, habilita y escucha los botones
+    /// (bitmask 2308…0F) ~2 min, imprimiendo cada botón decodificado y los bits sin mapear. SIN cuenta.
+    /// Por defecto NO emula teclas (para no escribir en ventanas ajenas); usa --keyboard para activarlo.
+    /// </summary>
+    private static async Task<int> RunAndriuzAsync(string deviceName, bool emulateKeyboard)
+    {
+        using var bridge = new ZwiftClickBridge(emulateKeyboard);
+
+        // Mapear los 10 botones para que cada uno se imprima al pulsarlo (teclas MyWhoosh).
+        bridge.SetActions(
+            new Dictionary<string, byte>
+            {
+                ["plus"] = KeyboardEmulator.VK_I,    ["minus"] = KeyboardEmulator.VK_K,
+                ["left"] = KeyboardEmulator.VK_LEFT,  ["right"] = KeyboardEmulator.VK_RIGHT,
+                ["nav_up"] = KeyboardEmulator.VK_U,   ["nav_down"] = KeyboardEmulator.VK_H,
+                ["btn_a"] = KeyboardEmulator.VK_1,    ["btn_b"] = KeyboardEmulator.VK_2,
+                ["btn_x"] = KeyboardEmulator.VK_3,    ["btn_y"] = KeyboardEmulator.VK_4,
+            },
+            new Dictionary<string, string>
+            {
+                ["plus"] = "+ (subir)", ["minus"] = "− (bajar)", ["left"] = "← izquierda", ["right"] = "→ derecha",
+                ["nav_up"] = "↑ arriba", ["nav_down"] = "↓ abajo", ["btn_a"] = "A", ["btn_b"] = "B",
+                ["btn_x"] = "X", ["btn_y"] = "Y",
+            });
+
+        bridge.ProgressChanged += p => Console.WriteLine($"   · {p.Message}");
+        bridge.DiagnosticFrame += f => Console.WriteLine($"   🔬 {f}");
+        bridge.ButtonEmitted += b => Console.WriteLine($"🎮 BOTÓN: {b.Label}  → tecla 0x{b.VirtualKey:X2}  [{b.ActionId}]");
+
+        bool ok = await bridge.StartAndriuzAsync(deviceName);
+        if (!ok) { Console.WriteLine("❌ No se pudo iniciar el modo V1 (¿mando apagado o ya conectado en otra app?)."); return 1; }
+
+        Console.WriteLine("\n⏱️  Escuchando 120 s. Pulsa TODOS los botones del mando, uno a uno, con pausas…");
+        await Task.Delay(TimeSpan.FromSeconds(120));
+        bridge.Stop();
+        Console.WriteLine("✅ Fin de la escucha. (Log crudo en logs/.)");
+        return 0;
+    }
+
+    /// <summary>
     /// Self-test de criptografía sin hardware: deriva una sesión V2 entre dos pares EC y verifica
     /// un round-trip AES-256-CCM con los parámetros confirmados.
     /// </summary>
@@ -146,6 +190,7 @@ public static class Program
         Console.WriteLine("Uso:");
         Console.WriteLine("  ZwiftClickV2-Bridge --bridge   [deviceName]   Unlock completo + emulación de teclado");
         Console.WriteLine("  ZwiftClickV2-Bridge --unlock   [deviceName]   Igual que --bridge (alias)");
+        Console.WriteLine("  ZwiftClickV2-Bridge --andriuz  [deviceName]   Modo V1 SIN cuenta: botones en claro (bitmask 2308…0F)");
         Console.WriteLine("  ZwiftClickV2-Bridge --diagnose [deviceName]   Solo handshake BLE (sin red, sin teclado)");
         Console.WriteLine("  ZwiftClickV2-Bridge --test-crypto             Self-test de cripto (no requiere hardware)");
         Console.WriteLine("  ZwiftClickV2-Bridge --help                    Esta ayuda");

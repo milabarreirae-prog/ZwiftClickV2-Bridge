@@ -48,13 +48,30 @@
 - Checkbox "Invertir + y −".
 
 ### Interfaz gráfica Violeta
-- WPF .NET 8, tema violeta/lila (inspirado en paleta MyWoosh, sin colores propietarios).
+- WPF .NET 8, tema violeta/lila (inspirado en paleta MyWhoosh, sin colores propietarios).
 - Logo: ciclista con una flor en la cabeza.
 - Vistas: Inicio · Cómo funciona (tutorial paso a paso) · Conectar mando · Acerca de.
-- Pantalla Conectar: pasos en vivo iluminados en tiempo real, tarjeta Calibrar +/−, registro en consola, "Copiar registro".
+- Pantalla Conectar: pasos en vivo iluminados en tiempo real, fichas de calibración por botón,
+  registro en consola, "Copiar registro".
 - Mensaje claro: **gratis, libre y para siempre**. Hecha con cariño por una mujer trans 🏳️‍⚧️.
 - Instalador: Inno Setup, por-usuario (sin admin), ES/EN, accesos directos.
 - Icono generado: `app/Assets/violeta.ico` (emblema lila multiresolución).
+
+#### Novedades de usabilidad (v1.1)
+- **Recordar preferencias** (`app/Services/UserSettings.cs`): el preset, la inversión + / −, el
+  nombre del mando, el modo de acceso, la autocalibración y la ruta de MyWhoosh se guardan en
+  `%AppData%\Violeta\settings.json`. **Nunca** se guardan la contraseña ni el token; el correo solo
+  si se marca «recordar mi correo».
+- **Presets multi-botón** (`app/Models/KeyPreset.cs` + `ZwiftClickBridge.SetActions`): el puente
+  mapea N acciones (no solo + / −). Nuevo preset **«MyWhoosh completo»** (marchas, dirección, UI,
+  emotes). Ver `docs/BUTTON_MAP.md`.
+- **Calibración automática guiada** (`ZwiftClickBridge.StartGuidedCalibration`): recorre las acciones
+  del preset una a una, con pre-aprendizaje del baseline (reposo) y avance automático. Se puede
+  lanzar al conectar o con el botón «Calibración automática».
+- **Flujo de conexión más claro**: mostrar/ocultar contraseña, Enter para «Empezar a rodar»
+  (`IsDefault`), recordar correo, validación y mensajes de estado mejorados.
+- **Lanzador MyWhoosh integrado**: botón «Empezar a rodar» que abre MyWhoosh (ruta configurable con
+  «Examinar…») y conecta el mando en un solo clic.
 
 ---
 
@@ -105,8 +122,11 @@ El payload protobuf completo del `0x08` no está documentado externamente. Lo qu
 
 ### 🔴 Alta prioridad — experiencia de uso inmediata
 
-#### 1. Mapear TODOS los botones del Click V2 para MyWhoosh
-El Click V2 tiene hasta 10 botones (diamond nav, A/B/X/Y, shift +/−). Hoy solo se calibran 2.
+#### 1. Mapear TODOS los botones del Click V2 para MyWhoosh — ✅ base hecha (v1.1)
+El puente ya admite **N acciones por preset** (`SetActions`) y la UI construye una ficha de
+calibración por botón. Hay un preset **«MyWhoosh completo»** (marchas, dirección, UI, emotes) y el
+mapa está documentado en `docs/BUTTON_MAP.md`. **Falta:** confirmar en hardware las firmas de los
+botones extra (nav, A/B/X/Y) y ampliar el preset cuando se capturen.
 MyWhoosh tiene estos atajos funcionales (ver `docs/MYWHOOSH_SHORTCUTS.md`):
 
 | Botón sugerido | Tecla MyWhoosh | Función |
@@ -120,11 +140,15 @@ MyWhoosh tiene estos atajos funcionales (ver `docs/MYWHOOSH_SHORTCUTS.md`):
 
 **Tarea concreta:** con el mando conectado, capturar la firma de cada botón (registro 🔬), documentarla en un archivo `docs/BUTTON_MAP.md`, y añadir presets predefinidos en la UI de Violeta (desplegable "Preset: MyWhoosh completo").
 
-#### 2. Calibración automática (sin intervención del usuario)
-Observar ~5 s de reposo tras el unlock, aprender el baseline automáticamente y mapear los botones más frecuentes a `I`/`K`. El usuario solo confirma si quiere cambiar algo. Elimina la necesidad de "Calibrar +/−" manual.
+#### 2. Calibración automática — ✅ guiada hecha (v1.1)
+`StartGuidedCalibration` observa ~2,5 s de reposo (pre-roll) para aprender el baseline solo, luego
+recorre las acciones del preset una a una y **avanza automáticamente** entre botones. El usuario solo
+aprieta cada botón cuando se le pide. Se lanza al conectar (opción «Calibrar automáticamente») o con
+el botón «Calibración automática». **Nota:** no es "cero intervención" (los botones hay que pulsarlos
+para aprenderlos), pero elimina el clic manual por cada botón.
 
 #### 3. Detección de burst rate
-Para distinguir `08001064180020` (keepalive ~1/s vs ráfaga del botón − ~10 veces seguidas): comparar la tasa de llegada en la ventana de calibración con la tasa de reposo, en vez del conteo acumulado. Elimina el caso borde actual que obliga a esperar 3-4 s antes de calibrar.
+Para distinguir `08001064180020` (keepalive ~1/s vs ráfaga del botón − ~10 veces seguidas): comparar la tasa de llegada en la ventana de calibración con la tasa de reposo, en vez del conteo acumulado. Elimina el caso borde actual que obliga a esperar 3-4 s antes de calibrar. **Mitigado parcialmente** por el pre-roll de baseline de la calibración guiada (v1.1).
 
 #### 4. Saltar emparejamiento innecesario
 No llamar a `EnsurePairedAsync` si `FindZapCharacteristicsAsync` ya tuvo éxito: elimina la ventana nativa "Error de conexión" de Windows que aparece aunque todo funcione.
@@ -133,8 +157,10 @@ No llamar a `EnsurePairedAsync` si `FindZapCharacteristicsAsync` ya tuvo éxito:
 
 ### 🟡 Media prioridad — distribución y alcance
 
-#### 5. Lanzador directo a MyWhoosh para Windows
-Un acceso directo / script que abra MyWhoosh y arranque Violeta simultáneamente, con la cuenta ya configurada. Experiencia de un solo clic: `"Empezar a rodar"`.
+#### 5. Lanzador directo a MyWhoosh para Windows — ✅ hecho (v1.1)
+El botón **«Empezar a rodar»** abre MyWhoosh (ruta configurable con «Examinar…», persistida) y
+arranca el puente en un solo clic. **Posible mejora futura:** acceso directo del sistema operativo
+que lance ambos sin abrir primero la ventana de Violeta.
 
 #### 6. Aplicación de conexión del mando en Android e iOS
 Port o companion app móvil que conecte el mando por BLE (Android tiene GATT API nativa, iOS también) y emule teclado via HID Bluetooth o socket local hacia el PC con MyWhoosh. Alternativa: integración directa con MyWhoosh mobile si exponen su API.

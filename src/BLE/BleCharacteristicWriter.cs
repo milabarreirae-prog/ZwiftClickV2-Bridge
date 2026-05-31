@@ -34,6 +34,19 @@ public class BleCharacteristicWriter
     }
 
     /// <summary>
+    /// Escribe un payload crudo DIRECTAMENTE en una característica concreta (sin pasar por el
+    /// registro por UUID). Necesario cuando hay DOS instancias del mismo UUID (los dos mandos
+    /// puenteados del Click V2): cada CH03 debe recibir su propia secuencia de habilitación.
+    /// </summary>
+    public async Task<GattCommunicationStatus> WriteRawToAsync(GattCharacteristic ch, byte[] payload, bool withResponse = false)
+    {
+        var writer = new DataWriter();
+        writer.WriteBytes(payload);
+        var option = withResponse ? GattWriteOption.WriteWithResponse : GattWriteOption.WriteWithoutResponse;
+        return await ch.WriteValueAsync(writer.DetachBuffer(), option);
+    }
+
+    /// <summary>
     /// Escribe un payload con formato ZOP: [sequence:4B LE] + [payload].
     /// </summary>
     /// <param name="uuid">UUID de la característica.</param>
